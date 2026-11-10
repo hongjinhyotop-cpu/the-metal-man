@@ -30,7 +30,7 @@
 | **M3** | 탐지와 식별 | ✅ 완료 |
 | **M4** | 무전 지휘 | ✅ 완료 |
 | **M5** | 승무원과 신뢰도 | ✅ 완료 |
-| M6 | 1호차 조준 화면 | 예정 |
+| **M6** | 1호차 조준 화면 | ✅ 완료 |
 | M7 | 캠페인과 재정비 | 예정 |
 | M8 | 적 다양화와 마무리 | 예정 |
 
@@ -197,6 +197,56 @@
 - 무전 지휘를 하는 전략(엄호·목표 지정)에는 신뢰도 효과가 붙지만 전투 한 번 안에서는 크게 움직이지 않는다(±15). 장만석의 명령 해석은 모의 전투 전략(이동 명령 없음)에는 영향이 없다.
 - 모의 전투: 아래 '확장 지침' 방법 그대로. 승무원 효과를 끄려면 `TMM.Crew.hitMul = () => 1` 처럼 함수를 바꾸면 된다.
 
+### M6 1호차 조준 화면 (완료)
+
+- **핵심 — 주의력 배분**: 소대장은 1호차 전차장이기도 하다. Tab 으로 **지도 ↔ 조준 화면**을 오간다.
+  - 조준 화면: 1호차는 **수동 사격** (플레이어가 직접 조준·발사). 대신 **무전 명령 불가** — 소대 전체 사격 통제(8·9·0)와 상황 보고 요구(R)만 단축키로 된다(받는 대상과 상관없이 `'ALL'`). 무전 지휘 창은 흐려지고 안내문이 바뀐다.
+  - 지도 화면: 1호차는 포수 김태윤 상병이 지금처럼 알아서 쏜다. 다만 전차장이 표적을 잡아 주지 않으므로 **조준 시간 ×1.25, 명중 ×0.93** (`TMM.SCOPE.AUTO_AIM_MUL/AUTO_HIT_MUL`).
+- **규칙** (`js/combat/scope.js`, 수치 `TMM.SCOPE`, DOM 없음 → 모의 전투에서도 씀): `game.scope = { open, az(포탑 방향), pitch, zoom, rx, ry(조준선 위치, 화면 너비 비율), settle, onId, laser, time, opens }`.
+  - 조준경에 보이는 표적 = 1호차가 **직접** 보는 것(`game.vis.get(1)`). 숲·건물 사이로 일부만 보이면 잎·벽 무늬가 덮이고, 차체 엄폐면 아랫부분이 땅에 가린다.
+  - 포탑: 조준선을 화면 가장자리(13%) 안으로 가져가면 그쪽으로 돈다(최대 시야각 × 1.4/초, 40°/초 한계, 실제 시간). A·D / W·S / 화살표도 됨. 휠·Z 배율: 광각 12°(×3) / 협각 4°(×10).
+  - **레이저(L 또는 오른쪽 클릭)**: 조준선이 표적 위면 거리(±5m)를 재고 30초(게임) 동안, 표적·1호차가 120m 넘게 움직이기 전까지 유효. 사격통제장치 손상이면 고장. 표적이 아니면 지형까지 거리.
+  - **명중** (`Ballistics.hitChance` 의 `mods.manual`): 포수 실력(`Crew.hitMul`) 대신 **조준 품질** = 거리(레이저 ×1, 눈대중이면 1km 마다 −22%, 최소 ×0.4) × 조준 안정(막 올림 ×0.7 → 1.3초 유지 ×1.2) × 원거리 × (가장자리 ×0.3). 레이저로 잰 움직이는 표적은 리드 자동 계산(×0.7 → ×0.9). 반동으로 쏠 때마다 안정은 0 으로.
+  - 표적 없는 곳에 쏘면 탄 1발 낭비. 사거리 밖은 막는다. 장전은 그대로 탄약수(`Crew.reloadMul`)와 게임 시간.
+  - **머리 숙임**: 조준 화면에 있는 동안 1호차는 조준경 시야 ±12° 밖을 잠망경으로만 본다 → 그쪽 탐지 거리 ×0.35 (`Scope.detectMul` → `Intel.pairVis`). 소대의 다른 전차가 본 것은 나침반 띠에 표시된다.
+  - **원거리**: 2km 밖 직접 조준은 1km 마다 −40%, 레이저 리드도 2km 밖에서 점점 효과가 줄어 3km 에서 없음.
+  - **식별**: 조준경 시야 안의 표적은 식별 시간 ×0.6(광각)·×0.4(협각), 조준선 바로 위면 ×0.3 (`Scope.idMul` → `Intel.pairVis`).
+  - **일시정지 중에는 조준·사격·레이저 불가** (조준선도 안 움직임). 멈춰 놓고 조준하기 금지. 열어 보는 것은 된다.
+  - 발사는 `Scope.fire` → `Gunnery.fireAt`(자동 사격과 같은 함수) → `shot` 사건(`manual: true`). 전투 틱 밖에서 생긴 사건은 `game.pendingEvents` 에 쌓였다가 다음 `Battle.step` 에서 무전·승무원·신뢰도 처리를 그대로 탄다.
+- **화면** (`js/render/scope-view.js`, `TMM.ScopeView`): 화면 세로 줄마다 포탑 방향으로 지도를 앞에서부터 훑어(높이 버퍼) 땅·숲(들쭉날쭉한 나무 윗선)·건물을 칠하는 2D '가짜 3D'. 지면은 시야 격자를 이중선형 보간(`Scope.ground`)해 표적과 그림이 딱 맞는다. 서 있는 칸과 60m 안의 숲·건물은 그리지 않는다(시선 규칙과 같음).
+  - 주간: 녹색·올리브, 멀수록 흐림. 야간: **열상(백열)** 흑백 — 엔진·바퀴·포구 섬광·불타는 잔해가 밝다, 잡음·주사선.
+  - 표적 실루엣: 천마호(둥근 포탑)·K1A2/K2(각진 포탑)·트럭·보병 분대. 보는 각도에 따라 폭과 포신 방향이 바뀌고, 포탑은 쏘는 표적 쪽을 향한다(이쪽을 겨누면 포구가 보임). 식별 50% 전이고 1.1km 밖이면 형체만(덩어리). 이름표: 미상 `? B 63%` / 적 / 아군.
+  - 효과: 내 사격 — 섬광·먼지로 잠깐 앞이 가림, 화면 흔들림, 예광탄, 명중(불꽃)·관통(섬광+연기)·격파(큰 불덩이) / 빗나감(흙먼지). 다른 전차의 사격도 보이면 포구 섬광·탄착. 격파된 전차는 연기 기둥과 불.
+  - HUD: 위 나침반 띠(방위각, 전장관리체계의 접촉 방위 삼각형, 화면 밖 적 화살표), 아래 정보 띠(거리·탄종·잔탄·장전·명중 예상·배율), 조준선 옆 레이저 거리, 조준 안정 고리, 차체·포탑 방향 그림, 왼쪽 무전 기록 6줄(`RadioLog.recent`), 승무원 자막.
+  - 승무원 자막 (`TMM.CREW_VOICE.scope`): 장전이 끝나면 이도현 이병 "장전 완료!"(숙련도 55 넘으면 "장전 완료.", 가끔 "철갑탄 장전 완료! …맞습니다!"), 장전 중에 쏘면 "아직입니다!", 레이저는 김태윤 상병 "거리 1820. 이동 표적, 리드 계산 완료.", 결과 "표적 격파." 등. 무전 기록에는 남기지 않는다.
+  - **경고**: 아군 전차 피격·격파, 오인사격, 교신 두절이 생기면 조준 화면 테두리가 깜빡이고 위에 문구(3.6초). 자동으로 지도로 빼지는 않는다. 1호차가 격파되면 조준 화면이 꺼진다.
+  - 첫 안내: 페이지를 연 뒤 처음 조준 화면을 열 때 한 번 (클릭·키로 닫힘, 14초 뒤 자동).
+  - 결과 화면에 '1호차 직접 조준' 줄 (발수·명중·격파·조준 화면에 있던 실제 시간).
+
+### M6 균형 메모
+
+모의 전투 (40회씩, 승률 · 아군 평균 손실). '조준 화면' 전략은 숙련된 플레이어 흉내: 포탑 초당 40°, 표적을 찾아 조준선을 올리는 데 0.7초, 레이저, 1.3초 유지 뒤 발사. '서툰 조준'은 찾는 데 2초, 0.6초만 유지하고 쏨.
+
+| 조건 | 주간 | 야간 |
+|---|---|---|
+| 가만히 — M5 와 같게 (지도 화면 포수 배수 끔) | 18% · 2.70대 | 50% · 2.20대 |
+| 가만히 — M6 (지도 화면 1호차 포수 혼자: 조준 ×1.25·명중 ×0.93) | 18% · 2.75대 | 53% · 2.13대 |
+| 1조 서·2조 동 엄호만 | 80% · 1.27대 | 90% · 0.78대 |
+| **엄호 + 계속 조준 화면** | **90% · 0.53대** | **100% · 0.23대** |
+| 엄호 + 목표 지정 (M5 최선) | 100% · 0.15대 | 100% · 0.35대 |
+| 엄호 + 목표 지정 + 30초마다 조준 화면 ↔ 지도 | 98% · 0.40대 | 100% · 0.40대 |
+| 계속 조준 화면만 (무전 지휘 없음) | 78% · 1.45대 | 88% · 1.30대 |
+| 계속 조준 화면만, 서툰 조준 | 73% · 1.93대 | 78% · 1.20대 |
+
+- **조준 화면을 안 써도 M5 수준**: 지도 화면의 1호차 포수 배수는 결과를 거의 바꾸지 않는다(같은 시드 ±3%).
+- **잘 쓰면 이득**: 엄호 방향만 정하고 1호차를 직접 쏘면 손실이 1.27 → 0.53대(주간), 0.78 → 0.23대(야간)로 준다. 1호차가 2~3km 표적을 레이저로 재고 쏘기 때문 (지도 화면 포수는 2km 안만 스스로 쏨).
+- **계속 조준 화면에만 있으면**: 지휘를 하는 것보다 손실이 4~10배(1.2~1.9대), 주간 서툰 조준이면 4판에 1판 꼴로 진다. 처음엔 '조준만'이 주간 100%·1.4대로 너무 강했다 — 1호차 혼자 2~3km 에서 적 2대를 잡으면 적 소대가 무너지기 때문. 그래서 넣은 것(게임용 추정치):
+  - **머리 숙임**: 조준경에 붙어 있는 동안 1호차는 조준경 시야 ±12° 밖을 잠망경으로만 본다 → 탐지 거리 ×0.35 (`HEAD_DOWN_DETECT`). 소대의 가장 좋은 관측자가 좁은 곳만 보게 된다.
+  - 2km 밖 직접 조준은 1km 마다 −40% (`LONG_LOSS_PER_KM`), 레이저 리드도 2km 밖에서는 점점 효과가 없어짐. 조준 안정 최대 배수 1.3 → 1.2.
+- 이미 최선으로 지휘하는 경우(엄호 + 목표 지정)에는 조준 화면을 오가도 손실이 줄지 않는다(오히려 0.15 → 0.40, 주간). 조준 화면에 있는 동안 목표 재지정을 못 하기 때문. 모의 전투의 '30초마다 전환'은 기계적이라, 사람이 교전이 잦아드는 때를 골라 들어가면 더 나을 것이다.
+- 더 어렵게: `TMM.SCOPE.HEAD_DOWN_DETECT` 를 낮추거나 `LONG_LOSS_PER_KM` 을 올린다. 조준 화면을 더 보람 있게: `SETTLED_MUL` 을 올린다.
+- 모의 전투에서 조준 화면 쓰기: `TMM.Scope.open(game)` → 매 틱 `scope.az/pitch` 를 표적 방향으로(포탑 속도 제한), `TMM.Scope.update(game, 실제초)`, `TMM.Scope.lase(game)`, `scope.settle` 이 차면 `TMM.Scope.fire(game)`. 실제 초 = 게임 초 / 3(교전 중) 또는 / 10. 조준 화면에 있는 동안 `Command.issue` 는 사격 통제·보고만 써야 공정하다.
+
 ## 4. 핵심 규칙과 수치
 
 - 지도: 160 × 120 칸, **1칸 = 50m** → 8km × 6km. 좌표 단위는 "칸"(실수). x = 서→동, y = 북→남.
@@ -228,7 +278,8 @@ js/combat/weapons.js     탄종·차종·관통 수치표, 손상 부위 정의 
 js/combat/sensors.js     관측 장비·표적 신호·시야 상수·낮밤 (TMM.SENSORS, TMM.SIGNATURE, TMM.VISION, TMM.LIGHT) ← 탐지·식별 균형은 여기
 js/combat/ballistics.js  명중(시야 배수 포함)·관통·손상 판정, 트럭·보병 피해 (TMM.Ballistics)
 js/combat/damage.js      전투 필드 초기화, 손상 적용, 상태 문구 (TMM.Damage)
-js/combat/gunnery.js     표적 선택(사격 통제 단계 반영)·조준·장전·사격 (TMM.Gunnery)
+js/combat/gunnery.js     표적 선택(사격 통제 단계 반영)·조준·장전·사격, 한 발 쏘기 fireAt (TMM.Gunnery)
+js/combat/scope.js       M6 1호차 조준 화면 규칙(DOM 없음): 포탑·조준선·레이저·조준 품질·수동 발사·식별/탐지 배수·지도 화면 포수 혼자 배수 (TMM.Scope, 수치 TMM.SCOPE) ← 조준 화면 균형은 여기
 js/units/enemy.js        적 천마호 소대 편성·경로(경유지·집결지·사격 진지)·후퇴 집결지·퇴각 출구 (TMM.Enemy)
 js/units/allies.js       비지휘 아군(보병 분대·보급 트럭·K2) 편성과 정해진 움직임 (TMM.Allies)
 js/game/intel.js         탐지·식별·접촉 표·시야 공유·차체 엄폐 상태 (TMM.Intel)
@@ -246,19 +297,21 @@ js/ui/radio-log.js       무전 기록 창 (TMM.RadioLog)
 js/ui/result.js          승패 결과 화면 (TMM.Result)
 js/ui/command-bar.js     무전 지휘 창: 받는 대상·명령·사격 통제 버튼, 안내, 송신 대기열 (TMM.CommandBar)
 js/render/terrain-layer.js  지형 바탕을 한 번 그려두는 오프스크린 캔버스
+js/render/scope-view.js  M6 조준 화면 그리기: 높이 버퍼 지형(주간/열상)·표적 실루엣·효과·조준선·나침반·정보 띠·무전 6줄·자막·경고 테두리·첫 안내 (TMM.ScopeView)
 js/render/renderer.js    매 프레임 그리기(야간 어둠·시야 표시·전차·접촉 기호·사격선·사거리 원·예광탄·감시 부채꼴·무전 표시·명령 미리보기), 좌표 변환, 클릭 판정
-js/main.js               시작 화면, 행동(actions: 받는 대상·명령 고르기·지도/표적 클릭), 무전망 밖 알림(오인사격·중대 무전)·화면 효과, 주 루프
+js/main.js               시작 화면, 행동(actions: 받는 대상·명령 고르기·지도/표적 클릭, M6 조준 화면 열기·발사·레이저·배율), 무전망 밖 알림(오인사격·중대 무전)·화면 효과, 조준 화면 자막·경고(피격·격파·교신 두절), 주 루프
 docs/DESIGN.md           이 문서
 ```
 
 ### 주요 데이터
 
-- `TMM.game` (`Battle.create` + main.js): `{ map, units, enemies, allies, light, startSeconds, gameSeconds, vis, intel, enemyGo, enemyBroken, ffCount, lastShotAt, combat, over, rand, selectedId, paused, started, speedMult, hover, hoverContactId, showSight, fx, radio, bound, cmd }`
+- `TMM.game` (`Battle.create` + main.js): `{ map, units, enemies, allies, light, startSeconds, gameSeconds, vis, intel, enemyGo, enemyBroken, ffCount, lastShotAt, combat, over, rand, selectedId, paused, started, speedMult, hover, hoverContactId, showSight, fx, radio, bound, cmd, scope, pendingEvents, scopeFx, scopeUi }`
+  - M6 `scope`: 위 M6 절. `pendingEvents`: 전투 틱 밖(조준 화면 발사)에서 생긴 사건, 다음 `Battle.step` 이 처리. `scopeFx`·`scopeUi`(경고·자막·첫 안내·반동): 화면 전용(main.js).
   - M4 `radio`: `{ queue[], timers[], busyUntil, pending: Map('전차id:종류' → {unitId, order, state}), batch, control }`. `state`: queued·tx·garble·noack·ack·exec. `bound`: 진행 중인 엄호 이동. `cmd`: `{ to, mode }` 화면의 받는 대상과 지도 클릭을 기다리는 명령.
   - `over`: 승패가 나면 `{ win, at }`. `fx`: 화면 효과(실제 시간 기준으로 사라짐).
   - `vis`: 이번 시야 계산에서 보이는 쌍 `Map(관측자 id → Map(표적 id → { d, obs, hullDown, idTime }))`.
   - `intel.friend/enemy.contacts`: `Map(표적 id → { label, unit, visible, seenBy, lastX, lastY, lastSeen, idProg, identified, kind('hostile'|'friendly'), cls, wreck, dist, obs })`.
-- 전차(unit, 아군·적 공통): `{ id, side('friend'|'enemy'), callsign, role, team, model('K1A2'|'CHONMA'), x, y, heading, path, dest, state, speedKmh }`
+- 전차(unit, 아군·적 공통): `{ id, side('friend'|'enemy'), callsign, role, team, model('K1A2'|'CHONMA'), x, y, heading, path, dest, state, speedKmh }`. M6: `stats.manual{shots,hits,kills}` (1호차 직접 조준 기록)
   - M2 전투 필드 (`TMM.Damage.initCombat`): `ammo{탄종:발수}, ammoType, damage{track,engine,gun,fcs,radio}, destroyed, targetId(플레이어 지정), fire{targetId(실제 겨누는 표적), aim, reload}, stats{shots,hits,kills}`
   - M3 필드: `hurt`(트럭·보병 피해), `exited`(지도 밖으로 나감), `lastFiredAt`(포구 섬광), `abandoned`(적, 유기), 아군 소대 `cover`/`hullDown`(차체 엄폐 상태).
   - 적만: `num`(1~4), `ai{mode, route[], wp, stage, staged, atPos, lane, deployed, repath, lastThreatAt}`
@@ -266,7 +319,7 @@ docs/DESIGN.md           이 문서
   - M4 필드 (아군 소대, `Orders.init`·`Radio.init`): `order{type,…}`(마지막 명령), `watch`(감시 방향 라디안|null), `roe`('hold'|'id'|'free'), `reverseM`(남은 후진 m), `selfCoverAt`, `selfMove`, `ammoWarned`, `lastMissLog`.
   - M5 필드 (아군 소대, `Crew.init`): `crew{ members[{key,name,rank,role,traits,skill,fatigue,morale,injury,shaken,stats}], byRole, trust, trustStart, trustLog[], kills, rescue, … }`, `stall`(고장 정비 남은 초).
   - `game.crewState`: 유머 간격·대화 대기열·격한 교전 판정 캐시.
-- 전투 사건(battle.js 가 돌려줌): `radio{from,text,kind}`(M4, 무전 기록 한 줄. M5 kind 'crew'·'trust-up'·'trust-down'), `arrive`, `shot{shooter,target,ammoId,res,fresh,unidentified,friendlyFire}`, `ammo-switch`, `contact-new{side,contact,unit,by}`, `contact-id{side,contact,unit,how('sight'|'iff')}`, `cease-fire`, `enemy-engage`, `enemy-retreat`, `enemy-go`, `enemy-break`, `enemy-abandon`, `enemy-exit`, `ally-move`, `ally-exit`, `over`. main.js 의 `report()` 가 무전 문장·효과로 바꾼다.
+- 전투 사건(battle.js 가 돌려줌): `radio{from,text,kind}`(M4, 무전 기록 한 줄. M5 kind 'crew'·'trust-up'·'trust-down'), `arrive`, `shot{shooter,target,ammoId,res,fresh,unidentified,friendlyFire,manual(M6)}`, `ammo-switch`, `contact-new{side,contact,unit,by}`, `contact-id{side,contact,unit,how('sight'|'iff')}`, `cease-fire`, `enemy-engage`, `enemy-retreat`, `enemy-go`, `enemy-break`, `enemy-abandon`, `enemy-exit`, `ally-move`, `ally-exit`, `over`. main.js 의 `report()` 가 무전 문장·효과로 바꾼다.
 - 지도(map): `{ cols, rows, metersPerCell, type[], elev[], sightElev[], speedMs[], typeAt(), infoAt(), speedMsAt(), altitudeAt(), gridRef() }`
 
 ### 확장 지침
@@ -277,17 +330,23 @@ docs/DESIGN.md           이 문서
 - 전투 수치(명중·관통·장전·탄약)는 `weapons.js`, 탐지·식별은 `sensors.js`, 지형의 가림은 `terrain-types.js` 의 `TERRAIN_SIGHT`, 적 행동 기준(교전 거리·집결·후퇴·퇴각 조건)은 `enemy-ai.js` 위쪽 상수, 적 경로는 `enemy.js` 만 고치면 된다.
 - 전투 규칙은 DOM 없이 돌아가므로(`battle.js` 이하) Node 로 모의 전투를 수백 번 돌려 균형을 볼 수 있다: index.html 의 스크립트 중 render·input·ui·main 을 뺀 나머지를 `vm` 으로 읽고 `game = TMM.Battle.create({ light, rand })`, `TMM.Battle.step(game, 0.5)` 반복. 한 판에 약 2초.
 
-## 6. 다음 단계 메모 (M6 1호차 조준 화면 준비)
+## 6. 다음 단계 메모 (M7 캠페인과 재정비 준비)
 
-M5 에서 M6 를 위해 정리해 둔 것:
+M6 까지 정리된 것과 M7 에서 할 일:
 
-- **포수·탄약수 수치는 함수 하나씩**: 조준 시간 `TMM.Crew.aimMul(u)`, 장전 시간 `reloadMul(u)`, 명중 `hitMul(u, 거리m)` (ballistics.js `hitChance` 안에서 곱함), 한 발 쏜 뒤 `afterShot(game, u, res, events)` (성장·탄종 실수). M6 의 조준 화면에서 플레이어가 직접 조준하면, 1호차는 `hitMul` 대신 '조준 정확도'를 쓰고, `aimMul` 은 포수가 표적을 잡아 주는 시간(자동 조준 보조)으로 바꾸면 된다.
-- **1호차 사격 흐름**: 지금은 `gunnery.js updateUnit` 이 조준(`fire.aim`)→장전(`fire.reload`)→사격을 자동으로 한다. M6 에서는 1호차만 `unit.manualGun = true` 같은 표시로 자동 사격을 끄고, 조준 화면에서 '발사' 할 때 `Ballistics.resolveShot` + `Damage.apply` + `Crew.afterShot` 을 부르고 같은 `shot` 사건을 만들면 무전·승무원·신뢰도 처리가 그대로 따라온다.
-- **탄종**: 1호차 탄종 전환(Q)은 main.js `cycleAmmo`. 조준 화면에서 탄약수에게 "철갑 장전" 을 외치게 하고, 이도현 이병의 실수 확률(`afterShot` 안의 slip 계산)을 '다른 탄이 실제로 들어감' 으로 바꿀 수 있다 (지금은 4초 지연만).
-- **조준 화면에 보일 것**: 표적까지 거리, 맞을 면(`Ballistics.aspect`), 명중 예상(`hitChance`), 차체 엄폐·가림(`Intel.fireMods`), 포수 상태(숙련·피로·부상)와 장전 상태. 포수 김태윤 상병의 말("…거리 1800. 쏘십시오.")은 `TMM.CREW_VOICE` 에 대사를 더하면 된다.
-- **시야**: 조준경 시야는 `Intel.sees(game, u, t)` 와 `game.vis.get(u.id)` (거리·가림·식별 시간)를 그대로 쓰면 된다. 야간 열상 표현은 `TMM.LIGHT`, `SENSORS`.
-- **M7 에 넘길 것**: 부상자 후송·복귀, 피로 회복(재정비), 신뢰도·숙련도 이어 쓰기(`Crew.snapshot` → `Battle.create({ crew })`), 1호차 격파 시 소대장 부상 처리. 난이도 설정(전사 허용)은 `crew.js` 의 `hurt()` 에서 중상 이상을 막는 부분.
-- **그 밖의 남은 과제** (M4 메모에서 이어짐):
+- **전투 한 번을 함수로**: `Battle.create({ light, map, rand, crew })` → `Battle.step` 반복 → `game.over`. 캠페인은 이것을 여러 번 부르고 사이에 재정비 화면을 넣으면 된다. `main.js` 의 `boot(light)` 는 지금 한 전투만 만든다 → `boot(battleSpec, saved)` 로 바꾸고 결과 화면의 '다시 하기'(지금은 페이지 새로고침)를 '다음 전투'/'재정비'로.
+- **이어 쓸 상태**:
+  - 승무원: `TMM.Crew.snapshot(game)` (숙련도·피로·사기·부상·신뢰) → 다음 `Battle.create({ crew })`. 부상자 후송·복귀, 피로 회복은 재정비에서 이 값을 고친다.
+  - 전차: 지금은 `Platoon.create()` 가 늘 새 전차. 격파·손상(`damage`), 잔탄(`ammo`)을 넘기려면 `Battle.create` 에 `units` 저장값을 받는 옵션을 더한다. 정비는 손상 부위를 시간 들여 고치는 것, 보급은 `ammoLoad` 까지 채우며 탄종 배분(철갑/고폭)을 고르게 하면 탄종 관리가 캠페인 결정이 된다.
+  - 1호차 직접 조준 기록 `stats.manual`, 조준 화면 시간 `game.scope.time` — 소대장 평가·보고서에 쓸 수 있다.
+- **72시간 시계**: `CONFIG.START_SECONDS`(D+0 05:00)·`OPERATION_HOURS`, `Clock` 이 이미 있다. 전투마다 `LIGHT` 처럼 시작 시각을 받게 하면 주간/야간 전투가 시간 흐름에 따라 정해진다.
+- **1호차가 격파되면**: 지금은 4호차가 지휘를 넘겨받고 조준 화면은 쓸 수 없다(`Scope.canUse`). M7 에서 소대장 부상(중상이면 다음 전투 부소대장 지휘 등)을 정한다. `Scope` 의 `unitId` 를 바꾸면 다른 전차를 조준 화면 대상으로 쓸 수도 있다.
+- **난이도**: 전사 허용은 `crew.js` 의 `hurt()` 에서 중상 이상을 막는 부분. 조준 화면 난이도는 `TMM.SCOPE` (조준 안정 배수·원거리 감소·머리 숙임 탐지 배수)로 조정.
+- **M6 에서 남은 과제**:
+  - 조준 화면의 '포수에게 표적 넘기기'(헌터킬러: 전차장이 찾은 표적을 포수가 자동으로 잡음)는 아직 없다 — 조준 화면에서 T 키로 지정하면 지도로 돌아갔을 때 포수가 그 표적부터 쏘게 하는 식으로 넣을 수 있다.
+  - 이도현 이병의 탄종 실수가 '다른 탄이 실제로 들어감'이 되는 것(지금은 4초 지연만).
+  - 모바일·좁은 화면에서는 조준 화면 정보 띠가 빽빽하다.
+- **그 밖의 남은 과제** (M4·M5 메모에서 이어짐):
   - 비지휘 아군(보병·트럭)과의 교신: 위치 보고를 요청하면 즉시 '아군' 식별 (`Intel.reveal(game, 'friend', unit, events, 'radio')`).
   - 사격 진지 점령 명령: 장만석 상사의 `betterSpot`(crew.js)을 일반화하면 '근처 차체 엄폐 지점 찾기' 명령이 된다.
   - 장만석 상사의 제안을 버튼 하나로 받아들이는 기능(지금은 무전으로 격자만 알려 줌).

@@ -42,6 +42,7 @@ TMM.Ballistics = (function () {
   /**
    * 명중 확률. mods (M3, TMM.Intel.fireMods 가 만듦):
    *   { obs: 가림 정도 0~1+, hullDown: 차체 엄폐, light: 'day'|'night' }
+   *   M6: manual { mul, lead } — 조준 화면 수동 사격 (TMM.Scope), autoMul — 지도 화면의 1호차 포수 혼자
    */
   function hitChance(map, shooter, target, ammoId, mods) {
     const ammo = TMM.AMMO[ammoId];
@@ -49,10 +50,14 @@ TMM.Ballistics = (function () {
     const d = distanceM(map, shooter, target);
     let p = curve(ammo.hit, d);
     if (isMoving(shooter)) p *= veh.moveFireMul;
-    if (isMoving(target)) p *= veh.targetMoveMul;
+    const manual = mods && mods.manual; // M6: 조준 화면 수동 사격
+    // 움직이는 표적: 레이저로 잰 수동 사격은 사격통제장치가 리드를 자동 계산한다
+    if (isMoving(target)) p *= manual && manual.lead ? veh.targetMoveMul + (TMM.SCOPE.LEAD_MOVE_MUL - veh.targetMoveMul) * manual.lead : veh.targetMoveMul;
     if (shooter.damage.fcs) p *= TMM.DAMAGE_EFFECT.fcsHitMul;
     p *= TMM.VEHICLES[target.model].size || 1;
-    if (shooter.crew && TMM.Crew) p *= TMM.Crew.hitMul(shooter, d); // M5: 포수 실력
+    if (manual) p *= manual.mul; // M6: 포수 실력 대신 플레이어의 조준 품질 (TMM.Scope.quality)
+    else if (shooter.crew && TMM.Crew) p *= TMM.Crew.hitMul(shooter, d); // M5: 포수 실력
+    if (mods && mods.autoMul) p *= mods.autoMul; // M6: 지도 화면에 있는 동안 1호차 포수 혼자
     if (mods) {
       const V = TMM.VISION;
       if (mods.hullDown) p *= V.HULL_DOWN_HIT;

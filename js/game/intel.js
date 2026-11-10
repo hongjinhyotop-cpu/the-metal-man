@@ -75,6 +75,10 @@ TMM.Intel = (function () {
       }
     }
     if (moving(t)) r *= V().MOVING_MUL;
+    if (TMM.Scope && game.scope) {
+      idMul *= TMM.Scope.idMul(game, o, t); // M6: 조준경 안의 표적은 크게 보여 빨리 식별
+      r *= TMM.Scope.detectMul(game, o, t); // M6: 조준경에 붙어 있으면 시야 밖은 잘 못 봄
+    }
     if (flash) {
       r = Math.max(r, sens.detect * V().FLASH_MUL[game.light]);
       idObs *= 0.5;

@@ -106,17 +106,56 @@ TMM.Gunnery = (function () {
     unit.heading += Math.abs(diff) <= maxStep ? diff : Math.sign(diff) * maxStep;
   }
 
+  /**
+   * 한 발 쏘기 (자동 사격과 M6 조준 화면의 수동 사격이 같이 쓴다).
+   * mods: Intel.fireMods 결과 (수동 사격이면 mods.manual 포함). 반환: 판정 결과 res
+   */
+  function fireAt(game, unit, target, rand, events, mods) {
+    const veh = TMM.VEHICLES[unit.model];
+    const ammoId = unit.ammoType;
+    const c = I().contact(game, unit.side, target.id);
+    const unidentified = !c || !c.identified;
+    unit.ammo[ammoId] -= 1;
+    unit.stats.shots += 1;
+    unit.lastFiredAt = game.gameSeconds;
+    unit.fire.reload = veh.reloadSec * (TMM.Crew ? TMM.Crew.reloadMul(unit) : 1); // M5: 탄약수
+    const res = B().resolveShot(game.map, unit, target, ammoId, rand, mods || I().fireMods(game, unit, target));
+    if (res.hit) unit.stats.hits += 1;
+    const fresh = D().apply(target, res);
+    const friendlyFire = target.side === unit.side;
+    if (res.destroyed && !friendlyFire) unit.stats.kills += 1;
+    if (mods && mods.manual) {
+      // M6: 조준 화면에서 직접 쏜 기록 (결과 화면)
+      const m = unit.stats.manual || (unit.stats.manual = { shots: 0, hits: 0, kills: 0 });
+      m.shots += 1;
+      if (res.hit) m.hits += 1;
+      if (res.destroyed && !friendlyFire) m.kills += 1;
+    }
+    if (friendlyFire) {
+      // 오인사격: 맞았든 빗나갔든 아군이 무전으로 외친다 → 정체가 드러나고 지정 목표 해제
+      unit.targetId = null;
+      unit.fire.targetId = null;
+      I().reveal(game, unit.side, target, null, 'ff');
+    }
+    if (TMM.Crew && unit.crew) TMM.Crew.afterShot(game, unit, res, events); // M5: 성장·탄종 실수
+    events.push({ type: 'shot', shooter: unit, target, ammoId, res, fresh, unidentified, friendlyFire, manual: !!(mods && mods.manual) });
+    return res;
+  }
+
   function updateUnit(game, unit, gdt, events, rand) {
     const f = unit.fire;
     f.reload = Math.max(0, f.reload - gdt);
     if (unit.destroyed || unit.exited || unit.damage.gun) { f.targetId = null; return; }
+    // M6: 소대장이 조준 화면에 있으면 1호차는 수동 사격 (TMM.Scope.fire). 포수 자동 사격은 쉰다.
+    if (TMM.Scope && TMM.Scope.isManual(game, unit)) { f.targetId = null; return; }
     if (!ensureAmmo(unit, events)) { f.targetId = null; return; }
 
     const target = chooseTarget(game, unit, events);
     if (!target) { f.targetId = null; return; }
     if (f.targetId !== target.id) {
       f.targetId = target.id;
-      f.aim = TMM.VEHICLES[unit.model].aimSec * (TMM.Crew ? TMM.Crew.aimMul(unit) : 1); // M5: 포수
+      // M5: 포수 실력. M6: 1호차는 소대장이 지도를 보는 동안 포수 혼자 표적을 잡아 느리다
+      f.aim = TMM.VEHICLES[unit.model].aimSec * (TMM.Crew ? TMM.Crew.aimMul(unit) : 1) * (TMM.Scope ? TMM.Scope.autoAimMul(game, unit) : 1);
     } else {
       f.aim = Math.max(0, f.aim - gdt);
     }
@@ -132,27 +171,9 @@ TMM.Gunnery = (function () {
     if (moving && !veh.canFireOnMove) return;
     if (f.aim > 0 || f.reload > 0) return;
 
-    // 사격
-    const ammoId = unit.ammoType;
-    const c = I().contact(game, unit.side, target.id);
-    const unidentified = !c || !c.identified;
-    unit.ammo[ammoId] -= 1;
-    unit.stats.shots += 1;
-    unit.lastFiredAt = game.gameSeconds;
-    f.reload = veh.reloadSec * (TMM.Crew ? TMM.Crew.reloadMul(unit) : 1); // M5: 탄약수
-    const res = B().resolveShot(game.map, unit, target, ammoId, rand, I().fireMods(game, unit, target));
-    if (res.hit) unit.stats.hits += 1;
-    const fresh = D().apply(target, res);
-    const friendlyFire = target.side === unit.side;
-    if (res.destroyed && !friendlyFire) unit.stats.kills += 1;
-    if (friendlyFire) {
-      // 오인사격: 맞았든 빗나갔든 아군이 무전으로 외친다 → 정체가 드러나고 지정 목표 해제
-      unit.targetId = null;
-      f.targetId = null;
-      I().reveal(game, unit.side, target, null, 'ff');
-    }
-    if (TMM.Crew && unit.crew) TMM.Crew.afterShot(game, unit, res, events); // M5: 성장·탄종 실수
-    events.push({ type: 'shot', shooter: unit, target, ammoId, res, fresh, unidentified, friendlyFire });
+    const mods = I().fireMods(game, unit, target);
+    if (TMM.Scope) mods.autoMul = TMM.Scope.autoHitMul(game, unit); // M6: 지도 화면의 1호차 포수 혼자
+    fireAt(game, unit, target, rand, events, mods);
   }
 
   function update(game, gdt, events) {
@@ -167,6 +188,7 @@ TMM.Gunnery = (function () {
     if (unit.damage.gun) return '주포 손상 — 사격 불가';
     if (D().totalAmmo(unit) <= 0) return '탄약 없음 — 사격 불가';
     const f = unit.fire;
+    if (TMM.Scope && TMM.Scope.isManual(game, unit)) return f.reload > 0 ? '수동 사격 · 장전 중 ' + Math.ceil(f.reload) + '초' : '수동 사격 · 장전 완료 (조준 화면)';
     if (f.targetId == null) {
       if (unit.targetId != null) return '지정 목표가 보이지 않거나 사거리 밖';
       return '표적 없음 (보이는 적 없음)';
@@ -177,5 +199,5 @@ TMM.Gunnery = (function () {
     return '사격 준비 완료';
   }
 
-  return { update, status, chooseTarget, inRange, findUnit };
+  return { update, status, chooseTarget, inRange, findUnit, fireAt, ensureAmmo };
 })();

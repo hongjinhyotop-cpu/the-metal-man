@@ -90,6 +90,12 @@ TMM.CommandBar = (function () {
 
   function update(game) {
     const cmd = game.cmd;
+    // M6: 조준 화면에 있는 동안 무전 명령 불가 (사격 통제·상황 보고만)
+    const scoped = !!(game.scope && game.scope.open);
+    if (cache.get('scoped') !== scoped) {
+      cache.set('scoped', scoped);
+      document.querySelector('.cmd-card').classList.toggle('scoped', scoped);
+    }
     const ctrl = TMM.Radio.controlUnit(game);
     for (const t of TO) {
       const b = els.to[t.to];
@@ -134,7 +140,8 @@ TMM.CommandBar = (function () {
     let hint;
     const name = TMM.Command.specName(game, cmd.to);
     const viaRadio = units.some((u) => u !== ctrl);
-    if (cmd.mode) hint = '▶ ' + name + ' · ' + ORDER_NAME[cmd.mode] + ' — ' + orderHint(cmd.mode) + ' (Esc 취소)';
+    if (scoped) hint = '조준 화면 중 — 무전 명령 불가. 8·9·0 사격 통제와 R 상황 보고만 소대 전체에 보냅니다. Tab 으로 지도에 돌아가야 지휘할 수 있습니다.';
+    else if (cmd.mode) hint = '▶ ' + name + ' · ' + ORDER_NAME[cmd.mode] + ' — ' + orderHint(cmd.mode) + ' (Esc 취소)';
     else if (!units.length) hint = name + ' — 명령을 받을 전차가 없습니다.';
     else if (viaRadio) hint = name + '에게 무전으로 명령합니다. 몇 초 뒤 도착하고 "수신" 응답 뒤 실행합니다.' + (game.paused ? ' 일시정지 중에는 송신 대기 — 재개하면 전달 시작.' : '');
     else hint = name + '(지휘 전차)는 바로 움직입니다. 지도를 클릭하면 이동, 표적을 클릭하면 사격 목표.';

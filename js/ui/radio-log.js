@@ -4,12 +4,15 @@
  */
 TMM.RadioLog = (function () {
   let listEl = null;
+  const recentLines = []; // M6: 조준 화면에 짧게 흘려 보여 줄 최근 줄
 
   function init(el) {
     listEl = el;
   }
 
   function add(gameSeconds, from, text, kind) {
+    recentLines.push({ at: gameSeconds, real: performance.now() / 1000, from, text, kind });
+    if (recentLines.length > 12) recentLines.shift();
     if (!listEl) return;
     const li = document.createElement('li');
     li.className = 'log-' + (kind || 'report');
@@ -24,5 +27,10 @@ TMM.RadioLog = (function () {
     while (listEl.children.length > TMM.CONFIG.LOG_MAX) listEl.lastChild.remove();
   }
 
-  return { init, add };
+  // 최근 n 줄 (새 것이 먼저)
+  function recent(n) {
+    return recentLines.slice(-n).reverse();
+  }
+
+  return { init, add, recent };
 })();

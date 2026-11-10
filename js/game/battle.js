@@ -30,12 +30,14 @@ TMM.Battle = (function () {
     TMM.Orders.init(game);
     TMM.Radio.init(game);
     TMM.Crew.init(game, opts && opts.crew); // M5 승무원·신뢰도 (opts.crew: 이전 전투의 TMM.Crew.snapshot)
+    TMM.Scope.init(game); // M6 1호차 조준 화면
+    game.pendingEvents = []; // M6: 전투 틱 밖(조준 화면 발사)에서 생긴 사건 → 다음 틱에서 무전·승무원 처리
     return game;
   }
 
   // gdt: 이번 틱의 게임 시간(초). 작전 시계도 여기서 진행한다.
   function step(game, gdt) {
-    const events = [];
+    const events = game.pendingEvents && game.pendingEvents.length ? game.pendingEvents.splice(0) : [];
     game.gameSeconds += gdt;
     TMM.Radio.update(game, gdt, events);
     for (const u of game.units) {

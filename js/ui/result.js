@@ -10,6 +10,16 @@ TMM.Result = (function () {
     el.querySelector('[data-restart]').addEventListener('click', () => window.location.reload());
   }
 
+  // M6: 조준 화면에서 직접 쏜 결과와 조준 화면에 있던 시간
+  function manualText(game) {
+    const u = game.units.find((x) => x.id === 1);
+    const m = u && u.stats.manual;
+    const sec = game.scope ? Math.round(game.scope.time) : 0;
+    const t = sec >= 60 ? Math.floor(sec / 60) + '분 ' + (sec % 60) + '초' : sec + '초';
+    if (!m || !m.shots) return game.scope && game.scope.opens ? '쏘지 않음 · 조준 화면 ' + t : '쓰지 않음 (포수 김태윤 상병이 사격)';
+    return m.shots + '발 · 명중 ' + m.hits + ' · 격파 ' + m.kills + ' · 조준 화면 ' + t + ' (실제 시간)';
+  }
+
   function show(game) {
     const win = game.over.win;
     const lost = game.units.filter((u) => u.destroyed).length;
@@ -34,6 +44,7 @@ TMM.Result = (function () {
       ['적 전차 격파', kills + ' / ' + game.enemies.length + ' 대' + (aband ? ' (유기 ' + aband + '대 별도)' : '') + (gone ? ' · 퇴각 ' + gone + '대' : '')],
       ['아군 손실', lost + ' / ' + game.units.length + ' 대'],
       ['사용 탄약', shots + ' 발 (명중 ' + hits + ' 발' + (shots ? ', ' + Math.round((hits / shots) * 100) + '%' : '') + ')'],
+      ['1호차 직접 조준', manualText(game)],
       ['오인사격', game.ffCount ? game.ffCount + ' 회 — 아군 피해 주의' : '없음'],
       ['비지휘 아군 손실', allyLost ? allyLost + ' (' + game.allies.filter((a) => a.destroyed).map((a) => a.callsign).join(', ') + ')' : '없음'],
       ['작전 시간', TMM.LIGHT[game.light].name],
