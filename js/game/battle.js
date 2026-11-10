@@ -38,6 +38,7 @@ TMM.Battle = (function () {
     TMM.Radio.init(game);
     TMM.Crew.init(game, opts && opts.crew); // M5 승무원·신뢰도 (opts.crew: 이전 전투의 TMM.Crew.snapshot)
     TMM.Scope.init(game); // M6 1호차 조준 화면
+    if (TMM.Support) TMM.Support.init(game); // M7b 이웃 K2 중대(흑표) 지원 요청
     game.pendingEvents = []; // M6: 전투 틱 밖(조준 화면 발사)에서 생긴 사건 → 다음 틱에서 무전·승무원 처리
     return game;
   }
@@ -62,6 +63,8 @@ TMM.Battle = (function () {
     TMM.Crew.onEvents(game, events);
     TMM.Radio.onEvents(game, events);
     if (game.op) TMM.Objective.update(game, events); // M7a: 정해진 시각의 중대 무전
+    if (TMM.Support) TMM.Support.update(game, gdt, events); // M7b: 이웃 K2 중대(흑표) 지원
+    transferLeader(game, events); // M7b: 소대장이 탄 전차가 격파되면 다른 전차로 옮겨 탄다
     for (const ev of events) {
       if (ev.type === 'shot') {
         game.lastShotAt = game.gameSeconds;
@@ -83,6 +86,26 @@ TMM.Battle = (function () {
       }
     }
     return events;
+  }
+
+  // M7b: 소대장이 탄 전차가 격파되면 소대장은 4호차(부소대장차, 없으면 남은 전차)로 옮겨 타서 지휘를 계속한다.
+  // 기본 난이도에서 소대장은 죽지 않는다(경상까지). 조준 화면도 새 전차 기준(4호차면 포수 조현석 하사).
+  function transferLeader(game, events) {
+    const cur = game.units.find((u) => u.leaderAboard);
+    if (!cur || !cur.destroyed) return;
+    const alive = game.units.filter((u) => !u.destroyed);
+    const next = alive.find((u) => u.id === 4) || alive[0];
+    cur.leaderAboard = false;
+    if (!next) return;
+    next.leaderAboard = true;
+    if (game.scope) {
+      if (game.scope.open) TMM.Scope.close(game);
+      game.scope.unitId = next.id;
+      game.scope.turretAz = null;
+      game.scope.laser = null;
+    }
+    events.push({ type: 'leader-transfer', from: cur, to: next });
+    events.push({ type: 'radio', from: '소대장', text: cur.callsign + ' 탈출. 소대장은 ' + next.callsign + '로 옮겨 탄다. 지휘 계속.', kind: 'warn' });
   }
 
   // 교전 중인가? (보이는 적이 가까이 있거나 최근에 사격이 있었음) → 시간 감속

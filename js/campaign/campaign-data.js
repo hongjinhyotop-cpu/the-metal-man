@@ -11,6 +11,7 @@
  *   allies: 비지휘 아군(보병·트럭·K2)을 넣을지 · rally/exits: 적 후퇴 집결지·퇴각 출구
  *   objective: objectives.js 형식 · calls: 정해진 시각의 중대 무전 · marks: 지도 표시(선·구역·지점)
  *   brief: 작전 명령서 문구 · ammo: 권장 철갑탄 수(32발 중) · intro: 작전 지도를 열 때 무전
+ *   refitHours (M7b): 앞 작전과 이 작전 사이의 재정비 시간(시간 단위)
  */
 TMM.CAMPAIGN = (function () {
   const BASE_ZONE = { x0: 69, y0: 102, x1: 95, y1: 117 }; // 주둔지 (적이 들어오면 방어 실패)
@@ -52,6 +53,7 @@ TMM.CAMPAIGN = (function () {
     // ---------------------------------------------------------------- 2
     {
       key: 'delay', no: 2, name: '지연전', when: 'D+0 15:00 · 주간', light: 'day', startSeconds: D(0, 15, 0),
+      refitHours: 5, // M7b: 앞 작전이 끝나고 이 작전까지 재정비에 쓸 수 있는 시간
       units: { 1: [86, 61], 2: [84, 64], 3: [112, 61], 4: [116, 60] },
       rearPos: { 1: [80, 106], 2: [78, 109], 3: [86, 106], 4: [88, 109] }, // 궤도가 끊긴 전차는 앞으로 못 나가고 주둔지에 남는다
       heading: -Math.PI / 2,
@@ -117,6 +119,7 @@ TMM.CAMPAIGN = (function () {
     // ---------------------------------------------------------------- 3
     {
       key: 'bridge', no: 3, name: '교량 사수', when: 'D+1 22:00 · 야간', light: 'night', startSeconds: D(1, 22, 0),
+      refitHours: 6, // M7b: 앞 작전이 끝나고 이 작전까지 재정비에 쓸 수 있는 시간
       units: { 1: [46, 80], 2: [50, 79], 3: [44, 86], 4: [50, 86] },
       heading: Math.PI, // 서쪽(다리)을 향함
       enemies: [
@@ -166,6 +169,7 @@ TMM.CAMPAIGN = (function () {
     // ---------------------------------------------------------------- 4
     {
       key: 'town', no: 4, name: '새터읍 역습', when: 'D+2 05:00 · 새벽(어둠)', light: 'night', startSeconds: D(2, 5, 0),
+      refitHours: 4, // M7b: 앞 작전이 끝나고 이 작전까지 재정비에 쓸 수 있는 시간
       units: { 1: [96, 62], 2: [92, 64], 3: [106, 62], 4: [110, 60] },
       heading: -Math.PI / 2,
       enemies: [
@@ -205,6 +209,7 @@ TMM.CAMPAIGN = (function () {
     // ---------------------------------------------------------------- 5
     {
       key: 'ridge', no: 5, name: '매봉 능선 탈환', when: 'D+2 15:00 · 주간', light: 'day', startSeconds: D(2, 15, 0),
+      refitHours: 5, // M7b: 앞 작전이 끝나고 이 작전까지 재정비에 쓸 수 있는 시간
       units: { 1: [108, 48], 2: [102, 50], 3: [114, 50], 4: [120, 48] },
       heading: -Math.PI / 2,
       enemies: [

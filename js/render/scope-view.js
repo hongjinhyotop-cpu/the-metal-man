@@ -773,6 +773,14 @@ TMM.ScopeView = (function () {
     ctx.restore();
   }
 
+  // M7b: 조준 화면 왼쪽 위 승무원 줄 (4호차로 옮겨 타면 조현석 하사, K2 는 자동장전)
+  function crewLine(u) {
+    const c = u.crew ? u.crew.byRole : {};
+    const g = c.gunner ? '포수 ' + c.gunner.name + ' ' + c.gunner.rank : '포수 없음';
+    const l = TMM.VEHICLES[u.model].autoloader ? '자동장전' : c.loader ? '탄약수 ' + c.loader.name + ' ' + c.loader.rank : '탄약수 없음 (포수 장전)';
+    return g + ' · ' + l;
+  }
+
   function drawGuide(ctx, W, H) {
     const lines = [
       ['마우스', '조준선 이동 · 화면 가장자리로 가져가면 포탑이 그쪽으로 회전 (A·D / W·S 키도 됨)'],
@@ -781,7 +789,7 @@ TMM.ScopeView = (function () {
       ['좌클릭', '발사. 조준선을 표적에 잠깐 유지하면(고리가 다 차면) 더 잘 맞음'],
       ['Q', '탄종 전환 (철갑탄 ↔ 고폭탄)'],
       ['8 · 9 · 0 · R', '소대 전체 사격 통제 · 상황 보고 요구 (다른 무전 명령은 지도에서만)'],
-      ['Tab · Esc', '지도로 돌아가기. 지도에 있는 동안은 김태윤 상병이 알아서 쏩니다 (조금 느리고 덜 정확)'],
+      ['Tab · Esc', '지도로 돌아가기. 지도에 있는 동안은 포수가 알아서 쏩니다 (조금 느리고 덜 정확)'],
     ];
     const bw = Math.min(620, W - 40), bh = 70 + lines.length * 34;
     const x = (W - bw) / 2, y = Math.max(50, (H - 58 - bh) / 2);
@@ -947,10 +955,10 @@ TMM.ScopeView = (function () {
     ctx.textBaseline = 'top';
     ctx.textAlign = 'left';
     ctx.fillStyle = night ? '#e8e8e8' : '#e2c35a';
-    ctx.fillText(night ? '1호차 열상 조준경 · 백열' : '1호차 조준경 · 주간', 12, 12);
+    ctx.fillText(u.callsign + (u.model === 'K2' ? ' K2' : '') + (night ? ' 열상 조준경 · 백열' : ' 조준경 · 주간'), 12, 12);
     ctx.fillStyle = '#c3c8a6';
     ctx.font = '500 10px ' + FONT_SANS;
-    ctx.fillText(fitText(ctx, '포수 김태윤 상병 · 탄약수 이도현 이병', Math.min(240, W * 0.2) - 12), 12, 28);
+    ctx.fillText(fitText(ctx, crewLine(u), Math.min(240, W * 0.2) - 12), 12, 28);
     ctx.textAlign = 'right';
     ctx.font = '700 11px ' + FONT_SANS;
     ctx.fillStyle = night ? '#e8e8e8' : '#e2c35a';

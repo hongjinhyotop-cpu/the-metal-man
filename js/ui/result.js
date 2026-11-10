@@ -17,11 +17,17 @@ TMM.Result = (function () {
 
   // M6: 조준 화면에서 직접 쏜 결과와 조준 화면에 있던 시간
   function manualText(game) {
-    const u = game.units.find((x) => x.id === 1);
-    const m = u && u.stats.manual;
+    // M7b: 소대장이 옮겨 탄 전차에서 쏜 것까지 합친다
+    let m = null;
+    for (const u of game.units) {
+      const x = u.stats.manual;
+      if (!x) continue;
+      m = m || { shots: 0, hits: 0, kills: 0 };
+      m.shots += x.shots; m.hits += x.hits; m.kills += x.kills;
+    }
     const sec = game.scope ? Math.round(game.scope.time) : 0;
     const t = sec >= 60 ? Math.floor(sec / 60) + '분 ' + (sec % 60) + '초' : sec + '초';
-    if (!m || !m.shots) return game.scope && game.scope.opens ? '쏘지 않음 · 조준 화면 ' + t : '쓰지 않음 (포수 김태윤 상병이 사격)';
+    if (!m || !m.shots) return game.scope && game.scope.opens ? '쏘지 않음 · 조준 화면 ' + t : '쓰지 않음 (포수가 알아서 사격)';
     return m.shots + '발 · 명중 ' + m.hits + ' · 격파 ' + m.kills + ' · 조준 화면 ' + t + ' (실제 시간)';
   }
 

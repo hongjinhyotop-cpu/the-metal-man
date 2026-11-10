@@ -166,6 +166,13 @@
           } else actions.scopeBlocked();
           return;
         }
+        if (id === 'support') {
+          // M7b: 흑표 지원 요청 (중대망, 소대 무전 명령이 아님)
+          const a = TMM.Support.available(game);
+          if (!a.ok) { toast(a.why, 'warn'); return; }
+          cmd.mode = cmd.mode === 'support' ? null : 'support';
+          return;
+        }
         if (id === 'stop') return issue({ type: 'stop' });
         if (id === 'report') return issue({ type: 'report' });
         cmd.mode = cmd.mode === id ? null : id;
@@ -189,6 +196,10 @@
         if (game.over || scoped()) return;
         const info = game.map.infoAt(x, y);
         const mode = cmd.mode;
+        if (mode === 'support') {
+          cmd.mode = null;
+          return logLines(TMM.Support.request(game, x, y).lines);
+        }
         if (mode === 'target') return issue({ type: 'target', targetId: null });
         if (mode === 'cover') return issue({ type: 'cover', x, y });
         if (mode === 'move' || mode === 'withdraw' || mode === 'bound') {
@@ -263,7 +274,7 @@
         if (game.over) return;
         if (scoped()) return closeScope();
         if (!TMM.Scope.canUse(game)) {
-          toast('1호차가 격파되어 조준 화면을 쓸 수 없습니다.', 'warn');
+          toast('소대장이 탄 전차가 없어 조준 화면을 쓸 수 없습니다.', 'warn');
           return;
         }
         cmd.mode = null;
@@ -373,8 +384,12 @@
       const ctrl = TMM.Radio.controlUnit(game);
       if (ctrl && ctrl.id !== 1) {
         cmd.to = String(ctrl.id);
-        log('체계', '1호차가 없어 소대장은 ' + ctrl.callsign + '에 타고 지휘합니다. 조준 화면은 쓸 수 없습니다.', 'warn');
+        log('체계', '1호차가 없어 소대장은 ' + ctrl.callsign + '에 동승해 지휘합니다. 조준 화면도 ' + ctrl.callsign + ' 기준입니다.', 'warn');
       }
+      const k2s = game.units.filter((u) => u.model === 'K2');
+      if (k2s.length) log('체계', k2s.map((u) => u.callsign).join('·') + '은(는) K2 (자동장전·승무원 3명). 조 단위 이동·엄호 이동 때는 K1A2 에 보조를 맞춥니다.', 'system');
+      const three = game.units.filter((u) => TMM.Crew.noLoader(u));
+      if (three.length) log('체계', three.map((u) => u.callsign).join('·') + ' — 탄약수 없이 3명. 포수가 장전해 장전이 느립니다.', 'warn');
       for (const u of game.units) {
         const heavy = ['track', 'engine'].filter((k) => u.damage[k]).map((k) => TMM.PARTS[k].name);
         if (heavy.length) log('체계', u.callsign + ' — 지난 작전의 ' + heavy.join('·') + ' 손상이 남아 있습니다' + (u.damage.track ? ' (이동 불가)' : ' (속도 절반)') + '.', 'warn');
@@ -420,6 +435,14 @@
           if (res.destroyed) log(TMM.RADIO.COMPANY, t.callsign + ' 피격! ' + (t.model === 'INF' ? '전투력 상실.' : '격파됨.'), 'loss');
           else if (res.hit) log(t.callsign, '피격! 피해 발생.', 'warn');
         }
+      } else if (ev.type === 'leader-transfer') {
+        // M7b: 소대장이 탄 전차가 격파됨 → 다른 전차로 옮겨 탐
+        if (scoped()) { showScope(false); ui.guide = false; }
+        if (cmd.to === String(ev.from.id)) cmd.to = String(ev.to.id);
+        const g = ev.to.crew && ev.to.crew.byRole.gunner;
+        toast(ev.from.callsign + ' 격파 — 소대장은 ' + ev.to.callsign + '로 옮겨 탑니다. 조준 화면(Tab)도 ' + ev.to.callsign + ' 기준' + (g ? ' (포수 ' + g.name + ' ' + g.rank + ')' : '') + '.', 'warn');
+      } else if (ev.type === 'support-arrive') {
+        toast('흑표 K2 2대 진입 — 지정한 방향을 잠시 엄호합니다.', '');
       } else if (ev.type === 'enemy-break') {
         log(TMM.RADIO.COMPANY, '적 무전 감청: 천마호 소대 퇴각 명령. 적이 북쪽으로 물러난다. 끝까지 쫓을 필요 없음.', 'system');
       } else if (ev.type === 'enemy-abandon') {
@@ -477,12 +500,16 @@
       if (ui.guide && nowR > ui.guideUntil) ui.guide = false;
       if (!scoped()) return;
       if (game.over) return closeScope();
-      if (!TMM.Scope.canUse(game)) return closeScope('1호차 격파 — 조준 화면이 꺼졌습니다. 지휘권은 4호차(부소대장차)로.');
+      if (!TMM.Scope.canUse(game)) return closeScope('소대장이 탄 전차 격파 — 조준 화면이 꺼졌습니다.');
       TMM.Scope.update(game, realDt);
       // 장전이 끝나면 탄약수가 외친다
       const u = TMM.Scope.unit(game);
       const r = u.fire.reload;
-      if (reloadWas > 0 && r <= 0 && !u.damage.gun && TMM.Damage.totalAmmo(u) > 0) voice('loader', loaderLine(u), null, 1.6);
+      if (reloadWas > 0 && r <= 0 && !u.damage.gun && TMM.Damage.totalAmmo(u) > 0) {
+        if (TMM.VEHICLES[u.model].autoloader) voice(null, '자동장전 완료', null, 1);
+        else if (!u.crew || !u.crew.byRole.loader) voice('gunner', '…장전 완료! (포수 장전)', null, 1.4);
+        else voice('loader', loaderLine(u), null, 1.6);
+      }
       reloadWas = r;
     }
 

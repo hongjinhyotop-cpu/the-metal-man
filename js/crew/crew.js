@@ -61,6 +61,11 @@ TMM.CREW = {
   SUGGEST_ABOVE: 70,
   // 윤지호: 숙련도가 이보다 낮으면 오인 보고·조기 사격
   JUMPY_UNTIL: 70,
+
+  // M7b 결원·재배치
+  OFF_ROLE_MUL: 0.85, // 원래 보직이 아닌 자리에 앉으면 실력 배수 (예: 탄약수가 포수 자리에)
+  NO_LOADER_RELOAD_MUL: 1.9, // K1A2 에 탄약수가 없으면 포수가 대신 장전 — 장전 시간 배수
+  NO_LOADER_AIM_MUL: 1.12, // …장전까지 하느라 조준도 조금 느려진다
 };
 
 TMM.Crew = (function () {
@@ -71,10 +76,21 @@ TMM.Crew = (function () {
   const fill = (s, d) => s.replace(/\{(\w+)\}/g, (_, k) => (d[k] != null ? d[k] : ''));
 
   // ---- 만들기 ----
+  // M7b: 승무원 정의 찾기 — 처음 명단(TMM.CREW_ROSTER) + 캠페인에서 온 보충병(people)
+  function personDef(key, people) {
+    for (const id in TMM.CREW_ROSTER) {
+      const d = TMM.CREW_ROSTER[id].find((m) => m.key === key);
+      if (d) return d;
+    }
+    return (people && people[key]) || null;
+  }
+
+  // saved: { key, role(M7b: 지금 앉은 자리), skill, morale, fatigue, injury, mods(M7b: 재정비 이벤트로 바뀐 성격) }
   function makeMember(d, saved) {
     const m = {
-      key: d.key, name: d.name, rank: d.rank, role: d.role, about: d.about || '', player: !!d.player,
-      traits: Object.assign({}, d.traits),
+      key: d.key, name: d.name, rank: d.rank, role: (saved && saved.role) || d.role, trained: d.role, about: d.about || '', player: !!d.player, recruit: !!d.recruit,
+      traits: Object.assign({}, d.traits, saved && saved.mods),
+      mods: saved && saved.mods ? Object.assign({}, saved.mods) : null,
       skill: d.skill, morale: d.morale, fatigue: 0, injury: 0,
       shaken: false, humor: 0, lastHumorAt: -1e9,
       stats: { shots: 0, hits: 0, kills: 0, reloads: 0, slips: 0, orders: 0, meters: 0, breakdowns: 0, asks: 0 },
@@ -86,13 +102,18 @@ TMM.Crew = (function () {
   }
 
   // saved: snapshot() 이 만든 이전 전투 상태 (M7 캠페인에서 이어 쓰기)
+  //   M7b: saved[호차].members 에 role(자리)이 있으면 그 명단 그대로 태운다 (보충병·재배치·결원). 없으면 처음 명단.
   function init(game, saved) {
     game.crewState = { lastIncoming: -1e9, lastHumorAt: -1e9, queue: [], sys: [], usedBanter: new Set(), heatAt: -1, heat: false, quietAt: -1, quiet: true, done: false };
+    game.crewPeople = (saved && saved.people) || {};
     for (const u of game.units) {
       const roster = TMM.CREW_ROSTER[u.id];
       if (!roster) continue;
       const sv = saved && saved[u.id];
-      const members = roster.map((d) => makeMember(d, sv && sv.members.find((x) => x.key === d.key)));
+      let members;
+      if (sv && sv.members.length && sv.members[0].role) {
+        members = sv.members.map((x) => { const d = personDef(x.key, game.crewPeople); return d ? makeMember(d, x) : null; }).filter(Boolean);
+      } else members = roster.map((d) => makeMember(d, sv && sv.members.find((x) => x.key === d.key)));
       const byRole = {};
       for (const m of members) byRole[m.role] = m;
       const trust = u.id === 1 ? null : sv && sv.trust != null ? sv.trust : TMM.CREW_TRUST_START[u.id];
@@ -109,8 +130,9 @@ TMM.Crew = (function () {
     const out = {};
     for (const u of game.units) {
       if (!u.crew) continue;
-      out[u.id] = { trust: u.crew.trust, members: u.crew.members.map((m) => ({ key: m.key, skill: m.skill, morale: m.morale, fatigue: m.fatigue, injury: m.injury })) };
+      out[u.id] = { trust: u.crew.trust, members: u.crew.members.map((m) => { const x = { key: m.key, role: m.role, skill: m.skill, morale: m.morale, fatigue: m.fatigue, injury: m.injury }; if (m.mods) x.mods = m.mods; return x; }) };
     }
+    out.people = game.crewPeople || {};
     return out;
   }
 
@@ -125,6 +147,7 @@ TMM.Crew = (function () {
     const mor = 0.95 + 0.1 * (m.morale / 100);
     let e = skill * fat * mor * K().INJURY_MUL[m.injury];
     if (m.shaken) e *= 0.75;
+    if (m.trained && m.role !== m.trained && !m.player) e *= K().OFF_ROLE_MUL; // M7b: 원래 보직이 아닌 자리
     return e;
   }
 
@@ -137,13 +160,21 @@ TMM.Crew = (function () {
     return boss && boss.injury < 2 ? 0.9 : 1;
   }
 
+  // M7b: K1A2 에 탄약수가 없다 (승무원 3명) — 포수가 대신 장전한다
+  const noLoader = (u) => !!(u && u.crew && !u.crew.byRole.loader && !TMM.VEHICLES[u.model].autoloader);
+
   function aimMul(u) {
     const g = member(u, 'gunner');
     if (!g) return 1;
-    return clamp((1 / eff(g)) * (g.traits.aimMul || 1) * bondMul(u), 0.7, 2.2);
+    return clamp((1 / eff(g)) * (g.traits.aimMul || 1) * bondMul(u) * (noLoader(u) ? K().NO_LOADER_AIM_MUL : 1), 0.7, 2.4);
   }
 
   function reloadMul(u) {
+    if (u && TMM.VEHICLES[u.model] && TMM.VEHICLES[u.model].autoloader) return 1; // M7b: K2 자동장전
+    if (noLoader(u)) {
+      const sub = member(u, 'gunner') || member(u, 'cmdr');
+      return clamp(K().NO_LOADER_RELOAD_MUL / (sub ? eff(sub) : 1), 1.3, 3.2);
+    }
     const l = member(u, 'loader');
     if (!l) return 1;
     return clamp((1 / eff(l)) * (l.traits.reloadMul || 1) * bondMul(u), 0.7, 2.4);
@@ -479,7 +510,7 @@ TMM.Crew = (function () {
     // 3호차: 송민혁 병장과 윤지호 하사의 갈등 (하사가 클수록·격파할수록 줄어든다)
     const g = member(u, 'gunner');
     if (g && g.traits.friction && g.injury < 2 && c && c.injury < 2) {
-      const level = clamp(1 - (c.skill - 40) / 45, 0, 1) * (u.crew.kills >= 2 ? 0.5 : 1);
+      const level = clamp(1 - (c.skill - 40) / 45, 0, 1) * (u.crew.kills >= 2 ? 0.5 : 1) * (g.traits.frictionMul != null ? g.traits.frictionMul : 1); // M7b: 재정비 이벤트에서 중재하면 줄어듦
       if (game.rand() < 0.35 * level) {
         out.delay += 2 + game.rand() * 3;
         if (!hot && canJoke(game, g) && globalJokeOk(game)) {
@@ -570,6 +601,7 @@ TMM.Crew = (function () {
   }
 
   function hurt(game, u, m, level, events, silent) {
+    if (m.player) level = Math.min(level, 1); // M7b: 기본 난이도에서 소대장은 중상·전사하지 않는다
     const before = m.injury;
     m.injury = Math.max(m.injury, Math.min(2, level));
     if (m.injury === before) return;
@@ -780,6 +812,6 @@ TMM.Crew = (function () {
     init, snapshot, update, onEvents, finish,
     eff, aimMul, reloadMul, hitMul, speedMul, idMul, radioFactor,
     afterShot, earlyFire, noteOrder, interpret, beforeAck, ackBody, onExecuted, spotLine, onDirectOrder,
-    summaries, trustLabel, statusWord, heated, member,
+    summaries, trustLabel, statusWord, heated, member, personDef, noLoader,
   };
 })();

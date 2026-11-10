@@ -163,9 +163,11 @@ TMM.CampaignUI = (function () {
     if (!t.alive) return '<span class="bad">격파됨 (작전 ' + t.lostIn + ') — 이번 작전 불참</span>';
     const dmg = TMM.PART_KEYS.filter((k) => t.damage[k]).map((k) => P[k]);
     const sv = s.crew && s.crew[id];
-    const hurt = sv ? sv.members.filter((m) => m.injury >= 2).map((m) => C().crewName(m.key).name) : [];
+    const hurt = sv ? sv.members.filter((m) => m.injury >= 2).map((m) => C().crewName(m.key, s).name) : [];
     const fat = sv ? Math.round(sv.members.reduce((a, m) => a + m.fatigue, 0) / sv.members.length) : null;
-    const parts = [dmg.length ? '<span class="bad">' + dmg.join('·') + ' 손상</span>' : '<span class="ok">차량 정상</span>'];
+    const parts = [modelTag(t) + (dmg.length ? ' <span class="bad">' + dmg.join('·') + ' 손상</span>' : ' <span class="ok">차량 정상</span>')];
+    if (sv && t.model !== 'K2' && !sv.members.some((m) => m.role === 'loader')) parts.push('<span class="warn">탄약수 없음</span>');
+    if (C().leaderTank(s) === id && id !== 1) parts.push('<span class="ok">소대장 동승</span>');
     if (hurt.length) parts.push('<span class="bad">중상 ' + hurt.join('·') + '</span>');
     if (fat != null) parts.push('피로 ' + fat);
     if (id !== 1) parts.push('신뢰 ' + Math.round(sv && sv.trust != null ? sv.trust : TMM.CREW_TRUST_START[id]));
@@ -251,53 +253,261 @@ TMM.CampaignUI = (function () {
     });
   }
 
-  // ---------------------------------------------------------------- 재정비
+  // ---------------------------------------------------------------- 재정비 (M7b)
+  // 순서: ① 작전 결과·대대 소식 → ② 승무원 이벤트(1~2개) → ③ 재정비 고르기(시간 나눠 쓰기) → ④ 재정비 결과 → 작전 명령
+  let refitStep = null; // 'news' | 'plan' (이벤트는 refitInfo.eventsDone 으로 판단)
+  let plan = null;
+  const INJ = ['', '경상', '중상'];
+  const ROLE_NAME = (r) => TMM.CREW_ROLES[r].name;
+  const modelTag = (t) => (t.model === 'K2' ? '<span class="c-k2">K2</span>' : '<span class="c-k1">K1A2</span>');
+  const hrs = (h) => (Math.round(h * 10) / 10).toString().replace(/\.0$/, '') + '시간';
+
   function refitScreen(s) {
-    const r = s.refit;
+    const info = s.refitInfo;
+    if (!info) { s.refitPending = false; C().save(s); return orders(s); } // 옛 저장
+    if (refitStep !== 'plan') return refitNews(s);
+    const ev = (info.events || []).find((id) => !info.eventsDone[id]);
+    if (ev) return eventScreen(s, ev);
+    return planScreen(s);
+  }
+
+  function resultHead(s) {
+    const last = s.history[s.history.length - 1];
+    const res = last.result;
+    return '<div class="c-res ' + res + '">작전 ' + last.no + ' ' + esc(last.name) + ' — ' + RESULT_NAME[res] + '</div>' +
+      '<p class="s-brief">' + esc(last.reason) + ' 적 격파 ' + last.kills + '대' + (last.abandoned ? ' · 유기 ' + last.abandoned : '') + (last.fled ? ' · 퇴각 ' + last.fled : '') + ' / ' + last.enemyTotal + '대, 아군 손실 ' + last.lost.length + '대, ' + last.minutes + '분.' + (last.ff ? ' 오인사격 ' + last.ff + '회.' : '') + '</p>';
+  }
+
+  // ① 작전 결과와 대대 소식
+  function refitNews(s) {
+    const info = s.refitInfo;
     const last = s.history[s.history.length - 1];
     const P = PART_NAMES();
-    const res = last.result;
-    const tankRows = r.tanks.map((t) => {
-      const team = t.id <= 2 ? 1 : 2;
-      if (!t.alive) return '<li class="team-' + team + ' dead"><b>' + t.id + '호차</b> ' + (t.lostNow ? '<span class="bad">이번 작전에서 격파</span> — 승무원 후송. 다음 작전 불참 (보충은 아직 없음)' : '작전 ' + t.lostIn + '에서 격파 — 불참') + '</li>';
-      const bits = [];
-      bits.push('탄약 ' + t.ammoBefore + ' → <b>' + t.ammoAfter + '</b>발');
-      if (t.repaired.length) bits.push('<span class="ok">수리: ' + t.repaired.map((k) => P[k]).join('·') + '</span>');
-      if (t.remain.length) bits.push('<span class="bad">수리 못 함: ' + t.remain.map((k) => P[k]).join('·') + '</span>');
-      if (!t.repaired.length && !t.remain.length) bits.push('<span class="ok">손상 없음</span>');
-      return '<li class="team-' + team + '"><b>' + t.id + '호차</b> ' + bits.join(' · ') + '</li>';
-    }).join('');
-    const ROLE = TMM.CREW_ROLES;
-    const INJ = ['', '경상', '중상'];
-    let crewRows = '', lastUnit = null;
-    for (const m of r.crew) {
-      if (m.unitId !== lastUnit) {
-        lastUnit = m.unitId;
-        const tr = r.trust[m.unitId];
-        const d = tr ? tr[1] - tr[0] : 0;
-        crewRows += '<li class="c-crew-head team-' + (m.unitId <= 2 ? 1 : 2) + '">' + m.unitId + '호차' +
-          (tr ? ' · 신뢰도 ' + tr[0] + ' → <b class="' + (d > 0 ? 'ok' : d < 0 ? 'bad' : '') + '">' + tr[1] + '</b> (' + (d >= 0 ? '+' : '') + d + ', ' + TMM.Crew.trustLabel(tr[1]) + ')' : ' · 소대장차') +
-          (m.alive ? '' : ' · <span class="bad">전차 격파, 후송</span>') + '</li>';
-      }
-      const bits = [];
-      if (m.injBefore) bits.push(m.injAfter < m.injBefore ? '<span class="ok">' + INJ[m.injBefore] + ' → 치료</span>' : '<span class="bad">' + INJ[m.injAfter] + '</span>');
-      bits.push('피로 ' + m.fatBefore + (m.fatAfter !== m.fatBefore ? ' → ' + m.fatAfter : ''));
-      bits.push('사기 ' + m.morale);
-      bits.push('숙련 ' + m.skill + (m.skillGain > 0 ? ' <span class="ok">(+' + m.skillGain + ')</span>' : ''));
-      crewRows += '<li class="team-' + (m.unitId <= 2 ? 1 : 2) + (m.injAfter >= 2 ? ' hurt' : '') + (m.alive ? '' : ' dead') + '"><span class="c-role">' + ROLE[m.role].name + '</span> <b>' + esc(m.name) + '</b> ' + m.rank + ' — ' + bits.join(' · ') + '</li>';
+    const news = [];
+    const lv = s.supply;
+    news.push('<li><b>대대 보급 상황: <span class="' + (lv === 2 ? 'ok' : lv === 0 ? 'bad' : '') + '">' + C().K.SUPPLY_NAME[lv] + '</span></b> — 요청하면 소대에 탄 ' + C().K.SUPPLY_POOL[lv] + '발까지' + (lv > 0 ? ' (추가 요청 시 +' + Math.round(C().K.SUPPLY_POOL[lv] * C().K.SUPPLY_EXTRA_MUL) + '발)' : ' (추가 요청 불가)') + '. ' + (last.result === 'fail' ? '작전 실패로 보급이 줄었다.' : last.result === 'success' && lv === 2 ? '' : '작전에 성공하면 나아진다.') + '</li>');
+    if (info.k2) {
+      news.push('<li class="good"><b>대대가 K2 전차 1대를 보충했다 → 새 ' + info.k2 + '호차.</b> 자동장전(승무원 3명: 전차장·포수·조종수), 120mm 55구경장, 더 빠른 기동과 기동 간 사격. 능동방호장치 없는 기존 양산형.' +
+        (info.k2 === 1 ? ' 소대장은 새 1호차에 탄다.' : '') + (info.spare ? ' 남는 탄약수 <b>' + esc(C().crewName(info.spare).name) + ' ' + C().crewName(info.spare).rank + '</b>는 후방 대기 — 아래 배치에서 다른 전차 빈자리에 넣을 수 있다.' : '') + '</li>');
+    } else if (info.lostNow && info.lostNow.length || C().IDS.some((id) => !s.tanks[id].alive)) {
+      const done = s.history[s.history.length - 1].no;
+      news.push('<li>' + (done < C().K.K2_FROM_OP ? '잃은 전차 보충은 작전 2 이후부터 대대가 검토한다.' : s.k2Count >= C().K.K2_MAX ? '대대의 K2 보충은 이미 다 받았다 (캠페인 최대 ' + C().K.K2_MAX + '대).' : '대대에 전차 보충을 요청했지만 이번에는 오지 않았다 (가능성 약 ' + info.k2Chance + '%). 작전 성과가 좋을수록 잘 온다.') + '</li>');
     }
+    for (const id in info.light) news.push('<li>' + id + '호차 승무원이 ' + info.light[id].map((k) => P[k]).join('·') + ' 손상을 자체 정비로 고쳤다.</li>');
+    for (const k of info.returned) news.push('<li class="good">' + esc(C().crewName(k).name) + ' ' + C().crewName(k).rank + ' — 치료를 마치고 복귀 (후방 대기).</li>');
+    const lost = C().IDS.filter((id) => !s.tanks[id].alive);
+    if (lost.length) news.push('<li class="bad">잃은 전차: ' + lost.map((id) => id + '호차').join(', ') + ' — 승무원은 후방 대기' + (lost.includes(1) && !info.k2 ? '. 소대장은 ' + C().leaderTank(s) + '호차에 동승해 지휘한다' : '') + '.</li>');
+    const tr = info.trust || {};
+    const trustRow = [2, 3, 4].filter((id) => tr[id] && s.tanks[id].alive).map((id) => { const d = tr[id][1] - tr[id][0]; return id + '호차 ' + tr[id][0] + ' → <b class="' + (d > 0 ? 'ok' : d < 0 ? 'bad' : '') + '">' + tr[id][1] + '</b>'; }).join(' · ');
+    if (trustRow) news.push('<li>신뢰도: ' + trustRow + '</li>');
     open(
-      '<div class="s-kicker">재정비 · 작전 ' + last.no + ' 결과</div>' +
-      '<div class="c-res ' + res + '">작전 ' + last.no + ' ' + esc(last.name) + ' — ' + RESULT_NAME[res] + '</div>' +
-      '<p class="s-brief">' + esc(last.reason) + ' 적 격파 ' + last.kills + '대' + (last.abandoned ? ' · 유기 ' + last.abandoned : '') + (last.fled ? ' · 퇴각 ' + last.fled : '') + ' / ' + last.enemyTotal + '대, 아군 손실 ' + last.lost.length + '대, ' + last.minutes + '분.' + (last.ff ? ' 오인사격 ' + last.ff + '회.' : '') + '</p>' +
-      '<div class="c-sec">전차 <span class="sub">— 자동 재정비: 탄약 보급' + (r.failed ? ' (작전 실패로 보급 차질 — ' + r.cap + '발까지)' : ' (32발까지)') + ', 가벼운 손상(주포·사격통제장치·무전기) 수리. 궤도·엔진 손상은 그대로.</span></div>' +
-      '<ul class="c-list">' + tankRows + '</ul>' +
-      '<div class="c-sec">승무원 <span class="sub">— 경상 치료, 피로 조금 회복(−20). 중상자는 그대로 근무 (교대·후송 선택은 다음 단계에서).</span></div>' +
-      '<ul class="c-list crew">' + crewRows + '</ul>' +
+      '<div class="s-kicker">재정비 · 작전 ' + last.no + ' 결과</div>' + resultHead(s) +
+      '<div class="c-sec">대대 소식</div><ul class="c-news">' + news.join('') + '</ul>' +
+      '<p class="c-ammo-help">다음 작전(작전 ' + (s.op + 1) + ')까지 <b>' + info.hours + '시간</b>. 정비·보급·휴식·부상자 처리에 시간이 든다 — 다 할 수는 없으니 우선순위를 고른다.</p>' +
+      '<div class="c-nav"><span class="c-gap">자동 저장됨</span><button type="button" class="r-btn" data-next data-focus>재정비 시작 ▸</button></div>',
+      'refit'
+    );
+    on('[data-next]', () => { refitStep = 'plan'; plan = null; refitScreen(s); });
+  }
+
+  // ② 승무원 이벤트
+  function eventScreen(s, id) {
+    const ev = TMM.CREW_EVENTS.find((e) => e.id === id);
+    const info = s.refitInfo;
+    const idx = info.events.indexOf(id);
+    const choices = C().eventChoices(s, ev);
+    const lines = ev.lines.map(([k, t]) => [k === 'recruit' ? recruitKey(s) : k, t]);
+    open(
+      '<div class="s-kicker">재정비 · 승무원 ' + (idx + 1) + ' / ' + info.events.length + '</div>' +
+      '<div class="c-scene"><span class="mono">' + esc(ev.title) + '</span> ' + esc(ev.place) + '</div>' +
+      linesHtml(lines) +
+      '<div class="c-choices">' + choices.map(({ c, i }) => '<button type="button" class="c-choice" data-choice="' + i + '"' + (i === choices[0].i ? ' data-focus' : '') + '>' + esc(c.label) + '</button>').join('') + '</div>',
+      'refit event'
+    );
+    el.querySelectorAll('[data-choice]').forEach((b) => b.addEventListener('click', () => {
+      const r = C().chooseEvent(s, id, Number(b.dataset.choice));
+      C().save(s);
+      const fx = r.changes.map((x) => '<span class="' + (x.what === '피로' ? (x.d < 0 ? 'ok' : 'bad') : x.d > 0 ? 'ok' : 'bad') + '">' + esc(x.who) + ' ' + x.what + ' ' + (x.d > 0 ? '+' : '') + x.d + '</span>').join(' · ');
+      open(
+        '<div class="s-kicker">재정비 · 승무원 ' + (idx + 1) + ' / ' + info.events.length + '</div>' +
+        '<div class="c-scene"><span class="mono">' + esc(ev.title) + '</span> ' + esc(ev.place) + '</div>' +
+        linesHtml(lines) + '<p class="c-picked">▸ ' + esc(ev.choices[Number(b.dataset.choice)].label) + '</p>' + linesHtml(r.lines) +
+        (fx ? '<p class="c-fx">' + fx + '</p>' : '') +
+        '<div class="c-nav"><span class="c-gap"></span><button type="button" class="r-btn" data-next data-focus>계속 ▸</button></div>',
+        'refit event'
+      );
+      on('[data-next]', () => refitScreen(s));
+    }));
+  }
+  function recruitKey(s) {
+    const r = C().present(s).find((x) => { const d = C().crewName(x.m.key, s); return d && d.recruit; });
+    return r ? r.m.key : 'note';
+  }
+
+  // ③ 재정비 고르기
+  function personLabel(s, key, role) {
+    if (key === 'NEW') return '대대 보충병 (새 신병)';
+    const p = C().personInfo(s, key);
+    if (!p) return key;
+    const bits = [p.name + ' ' + p.rank, ROLE_NAME(p.trained) + (role && p.trained !== role ? ' 출신' : ''), '숙련 ' + Math.round(p.m.skill)];
+    if (p.m.injury) bits.push(INJ[p.m.injury]);
+    return bits.join(' · ');
+  }
+  function seatOptions(s, id, role) {
+    const cur = plan.seats[id][role];
+    const opts = [];
+    const add = (v, label, group) => opts.push({ v, label, group });
+    if (cur && cur !== 'NEW') add(cur, personLabel(s, cur, role), '지금');
+    for (const x of C().present(s)) {
+      const k = x.m.key;
+      if (k === cur || C().personInfo(s, k).player || plan.wounded[k] === 'evac') continue;
+      const at = C().seatOf(plan, k);
+      // 다른 전차 사람은 같은 보직만 (목록이 너무 길어지지 않게). 후방 대기는 모두.
+      if (at) { if (C().personInfo(s, k).trained === role) add(k, personLabel(s, k, role) + ' — ' + at.id + '호차 ' + ROLE_NAME(at.role) + ' 자리와 맞바꿈', '다른 전차'); }
+      else add(k, personLabel(s, k, role), '후방 대기');
+    }
+    add('NEW', '대대 보충병 (새 신병, 숙련 20~32)', '보충');
+    if (!C().REQUIRED.includes(role)) add('', '비워 둠 — 포수가 대신 장전 (장전 느림)', '보충');
+    return opts;
+  }
+
+  function planScreen(s) {
+    const info = s.refitInfo;
+    if (!plan) plan = C().recommend(s);
+    const cost = C().planCost(s, plan);
+    const P = PART_NAMES();
+    const alive = C().aliveIds(s);
+    const over = cost.left < -1e-6;
+    const pct = Math.min(100, (cost.used / cost.hours) * 100);
+    // 시간 막대
+    const timeBar = '<div class="c-time' + (over ? ' over' : '') + '"><div class="c-time-h"><b>재정비 시간</b> <span class="mono">' + hrs(cost.used) + ' / ' + hrs(cost.hours) + '</span> <span class="' + (over ? 'bad' : 'sub') + '">' + (over ? '· ' + hrs(-cost.left) + ' 초과 — 줄여야 확정할 수 있다' : '· 남은 ' + hrs(cost.left)) + '</span></div>' +
+      '<div class="c-time-bar"><i style="width:' + pct + '%"></i></div>' +
+      '<div class="c-time-items">' + (cost.items.length ? cost.items.map((x) => '<span>' + esc(x.what) + ' <b class="mono">' + hrs(x.h) + '</b></span>').join('') : '<span class="sub">아직 아무것도 고르지 않음</span>') + '</div></div>';
+    // 정비
+    const repairRows = alive.map((id) => {
+      const t = s.tanks[id];
+      const heavy = C().K.HEAVY_PARTS.filter((k) => t.damage[k]);
+      const team = id <= 2 ? 1 : 2;
+      const bits = heavy.length ? heavy.map((k) => '<label class="c-chk"><input type="checkbox" data-repair="' + id + ':' + k + '"' + (plan.repair[id][k] ? ' checked' : '') + '> ' + P[k] + ' 수리 <span class="mono">' + C().K.REPAIR_H[k] + '시간</span> <span class="sub">— 안 고치면 ' + (k === 'track' ? '움직일 수 없음' : '속도 절반') + '</span></label>').join('') : '<span class="ok">큰 손상 없음</span>';
+      return '<div class="c-row team-' + team + '"><b>' + id + '호차</b> ' + modelTag(t) + (t.isNew ? ' <span class="ok">새 전차</span>' : '') + ' ' + bits + '</div>';
+    }).join('');
+    // 보급
+    const pv = C().supplyPreview(s, plan);
+    const lv = s.supply;
+    const supBtn = (v, label, h, dis) => '<button type="button" class="c-seg' + (plan.supply === v ? ' on' : '') + '" data-supply="' + v + '"' + (dis ? ' disabled' : '') + '>' + label + (h ? ' <span class="mono">' + h + '</span>' : '') + '</button>';
+    const ammoRows = alive.map((id) => { const t = s.tanks[id]; const now = C().total(t.ammo); const mx = C().ammoMax(t); const after = pv.after[id]; return '<span class="c-ammo-t"><b>' + id + '호차</b> <span class="mono">' + now + (after > now ? ' → <b class="ok">' + after + '</b>' : '') + ' / ' + mx + '</span></span>'; }).join('');
+    // 휴식
+    const fatAvg = Math.round(avg(C().present(s).filter((x) => x.tank).map((x) => x.m.fatigue)));
+    const fatAfter = Math.max(C().K.FATIGUE_MIN, fatAvg - C().K.BASE_FATIGUE - C().K.REST_FATIGUE * plan.rest);
+    // 부상자
+    const wounded = C().woundedList(s);
+    const woundRows = wounded.length ? wounded.map((x) => {
+      const k = x.m.key, p = C().personInfo(s, k), v = plan.wounded[k];
+      const heavy = x.m.injury >= 2;
+      const at = C().seatOf(plan, k) || plan.prevSeat[k];
+      return '<div class="c-row' + (heavy ? ' hurt' : '') + '"><b>' + esc(p.name) + '</b> ' + p.rank + ' <span class="sub">' + ROLE_NAME(p.trained) + (at ? ' · ' + at.id + '호차' : ' · 후방 대기') + '</span> <span class="' + (heavy ? 'bad' : 'warn') + '">' + INJ[x.m.injury] + '</span>' +
+        '<span class="c-segs">' +
+        '<button type="button" class="c-seg' + (v === 'evac' ? ' on' : '') + '" data-wound="' + k + ':evac">후송 <span class="mono">' + hrs(C().K.EVAC_H) + '</span></button>' +
+        '<button type="button" class="c-seg' + (v === 'keep' ? ' on' : '') + '" data-wound="' + k + ':keep">' + (heavy ? '데리고 감' : '남겨서 싸움') + '</button></span>' +
+        '<span class="c-row-note sub">' + (heavy ? (v === 'evac' ? '72시간 안에 돌아오지 못한다.' : '실력 절반으로 계속 근무. 낫지 않는다.') : v === 'evac' ? '1~2작전 뒤 복귀.' : '실력 ×0.85. ' + C().K.HEAL_REST_H + '시간 이상 쉬면 낫는다.') + '</span></div>';
+    }).join('') : '<p class="sub c-none">부상자 없음.</p>';
+    // 승무원 배치
+    const seatCards = alive.map((id) => {
+      const t = s.tanks[id];
+      const team = id <= 2 ? 1 : 2;
+      const rows = C().seatRoles(t).map((role) => {
+        const cur = plan.seats[id][role];
+        const p = cur && cur !== 'NEW' ? C().personInfo(s, cur) : null;
+        if (p && p.player) return '<div class="c-seat"><span class="c-role">' + ROLE_NAME(role) + '</span><span class="c-seat-fixed">소대장 (나)</span></div>';
+        const opts = seatOptions(s, id, role);
+        let html = '<select data-seat="' + id + ':' + role + '" aria-label="' + id + '호차 ' + ROLE_NAME(role) + '">';
+        if (!cur) html += '<option value="" selected>— 빈자리 —</option>';
+        let grp = null;
+        for (const o of opts) {
+          if (o.group !== grp) { if (grp) html += '</optgroup>'; grp = o.group; html += '<optgroup label="' + esc(grp) + '">'; }
+          if (o.v === '' && !cur) continue;
+          html += '<option value="' + esc(o.v) + '"' + ((o.v || '') === (cur || '') ? ' selected' : '') + '>' + esc(o.label) + '</option>';
+        }
+        html += '</optgroup></select>';
+        const warn = !cur ? '<span class="bad">비었음' + (role === 'loader' ? ' — 포수가 장전 (느림)' : '') + '</span>' : cur === 'NEW' ? '<span class="sub">신병 — 숙련 낮음</span>' : p.trained !== role ? '<span class="warn">' + ROLE_NAME(p.trained) + ' 출신 — 실력 ×0.85</span>' : '<span class="sub">피로 ' + Math.round(p.m.fatigue) + ' · 사기 ' + Math.round(p.m.morale) + '</span>';
+        return '<div class="c-seat"><span class="c-role">' + ROLE_NAME(role) + '</span>' + html + warn + '</div>';
+      }).join('');
+      return '<div class="c-crewcard team-' + team + '"><div class="c-tank-h"><b>' + id + '호차</b> ' + modelTag(t) + (t.model === 'K2' ? ' <span class="sub">자동장전 · 3명</span>' : '') + '</div>' + rows + '</div>';
+    }).join('');
+    const reserve = C().present(s).filter((x) => !C().seatOf(plan, x.m.key) && !C().personInfo(s, x.m.key).player && plan.wounded[x.m.key] !== 'evac');
+    const reserveHtml = reserve.length ? '<p class="c-reserve"><b>후방 대기:</b> ' + reserve.map((x) => { const p = C().personInfo(s, x.m.key); return esc(p.name + ' ' + p.rank) + ' <span class="sub">(' + ROLE_NAME(p.trained) + (x.m.injury ? ', ' + INJ[x.m.injury] : '') + (x.m.spare ? ', K2 보충으로 남음' : '') + ')</span>'; }).join(' · ') + '</p>' : '';
+    const leaderNote = !s.tanks[1].alive ? '<p class="c-ammo-help">1호차가 없어 소대장은 ' + C().leaderTank(s) + '호차에 동승해 지휘한다 (조준 화면도 그 전차 기준).</p>' : '';
+
+    const st = el.scrollTop;
+    open(
+      '<div class="c-order-head"><div><div class="s-kicker">재정비 · 작전 ' + (s.op + 1) + ' 준비</div><div class="c-op">재정비 <span>/ 작전 ' + (s.op + 1) + ' ' + esc(D().OPS[s.op].name) + ' 앞</span></div></div>' +
+      '<button type="button" class="c-btn" data-rec title="M7a 의 자동 재정비처럼: 보급 → 중상자 후송 → 궤도·엔진 → 남은 시간 휴식, 빈자리는 후방 대기·보충병">추천대로 하기</button></div>' +
+      timeBar +
+      '<div class="c-sec">정비 <span class="sub">— 궤도·엔진 같은 큰 손상은 오래 걸린다. 주포·사통·무전기는 승무원이 이미 자체 정비했다.</span></div>' + repairRows +
+      '<div class="c-sec">보급 <span class="sub">— 대대 보급 상황 <b class="' + (lv === 2 ? 'ok' : lv === 0 ? 'bad' : '') + '">' + C().K.SUPPLY_NAME[lv] + '</b>: 요청하면 ' + C().K.SUPPLY_POOL[lv] + '발, 탄이 적은 전차부터 채운다.</span></div>' +
+      '<div class="c-segs">' + supBtn(0, '안 받음', '') + supBtn(1, '탄약 요청', '1시간') + supBtn(2, '추가 요청까지', '2시간', !pv.extraOk) + '</div>' +
+      '<div class="c-ammo-list">' + ammoRows + (plan.supply ? ' <span class="sub">받는 탄 ' + pv.used + '발</span>' : '') + '</div>' +
+      '<div class="c-sec">휴식 <span class="sub">— 1시간마다 피로 −' + C().K.REST_FATIGUE + ', 사기 +' + C().K.REST_MORALE + '. ' + C().K.HEAL_REST_H + '시간 이상 쉬면 남긴 경상자가 낫는다.</span></div>' +
+      '<div class="c-segs"><button type="button" class="c-seg" data-rest="-1" aria-label="휴식 줄이기">−</button><span class="c-rest mono">' + plan.rest + '시간</span><button type="button" class="c-seg" data-rest="1" aria-label="휴식 늘리기">+</button>' +
+      '<span class="sub">전차 승무원 평균 피로 ' + fatAvg + ' → <b class="' + (fatAfter <= 20 ? 'ok' : fatAfter >= 50 ? 'bad' : '') + '">' + fatAfter + '</b> <span class="sub">(20 넘으면 실력이 떨어지기 시작)</span></span></div>' +
+      '<div class="c-sec">부상자 처리</div>' + woundRows +
+      '<div class="c-sec">승무원 배치 <span class="sub">— 빈자리는 대대 보충병(능력 낮은 신병)이나 다른 전차·후방 대기 승무원으로. 다른 전차 사람을 고르면 서로 자리를 바꾼다. 전차장·포수·조종수는 비울 수 없다.</span></div>' +
+      leaderNote + '<div class="c-crewcards">' + seatCards + '</div>' + reserveHtml +
+      '<div class="c-nav"><span class="c-gap">' + (over ? '<span class="bad">시간이 모자란다 — 무엇을 뺄지 고르십시오.</span>' : '남은 시간은 그냥 흘러간다 (휴식에 넣는 게 좋다).') + '</span>' +
+      '<button type="button" class="r-btn" data-ok data-focus' + (over ? ' disabled' : '') + '>재정비 확정 ▸</button></div>',
+      'refit plan'
+    );
+    el.scrollTop = st;
+    const again = () => planScreen(s);
+    on('[data-rec]', () => { plan = C().recommend(s); again(); });
+    el.querySelectorAll('[data-repair]').forEach((b) => b.addEventListener('change', () => { const [id, k] = b.dataset.repair.split(':'); plan.repair[id][k] = b.checked; again(); }));
+    el.querySelectorAll('[data-supply]').forEach((b) => b.addEventListener('click', () => { plan.supply = Number(b.dataset.supply); again(); }));
+    el.querySelectorAll('[data-rest]').forEach((b) => b.addEventListener('click', () => { plan.rest = Math.max(0, Math.min(8, plan.rest + Number(b.dataset.rest))); again(); }));
+    el.querySelectorAll('[data-wound]').forEach((b) => b.addEventListener('click', () => { const [k, v] = b.dataset.wound.split(':'); C().setWounded(s, plan, k, v); again(); }));
+    el.querySelectorAll('[data-seat]').forEach((sel) => sel.addEventListener('change', () => {
+      const [id, role] = sel.dataset.seat.split(':');
+      if (!C().assign(s, plan, Number(id), role, sel.value || null)) window.alert('그 자리에는 배치할 수 없습니다' + (sel.value === 'NEW' ? ' (보충병은 한 번에 ' + C().K.RECRUITS_PER_REFIT + '명까지).' : '.'));
+      again();
+    }));
+    on('[data-ok]', () => {
+      if (C().planCost(s, plan).left < -1e-6) return;
+      const rep = C().applyRefit(s, plan);
+      C().save(s);
+      plan = null;
+      refitStep = null;
+      refitReport(s, rep);
+    });
+  }
+  const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
+
+  // ④ 재정비 결과
+  function refitReport(s, rep) {
+    const P = PART_NAMES();
+    const nm = (k) => { const d = C().crewName(k, s); return d ? (d.player ? '소대장' : d.name + ' ' + d.rank) : k; };
+    const li = [];
+    for (const id in rep.repaired) li.push('<li class="good">' + id + '호차 ' + rep.repaired[id].map((k) => P[k]).join('·') + ' 수리 완료.</li>');
+    for (const id of C().aliveIds(s)) {
+      const left = C().K.HEAVY_PARTS.filter((k) => s.tanks[id].damage[k]);
+      if (left.length) li.push('<li class="bad">' + id + '호차 ' + left.map((k) => P[k]).join('·') + ' 손상 남음 — ' + (left.includes('track') ? '이번 작전에서 움직일 수 없다.' : '속도 절반.') + '</li>');
+    }
+    if (rep.supply.requested) li.push('<li>탄약 ' + Object.values(rep.supply.add).reduce((a, b) => a + b, 0) + '발 받음: ' + Object.keys(rep.supply.after).map((id) => id + '호차 ' + rep.supply.after[id] + '발').join(' · ') + '</li>');
+    else li.push('<li class="bad">탄약 보급을 받지 않았다: ' + C().aliveIds(s).map((id) => id + '호차 ' + C().total(s.tanks[id].ammo) + '발').join(' · ') + '</li>');
+    li.push('<li>휴식 ' + rep.rest + '시간.' + (rep.healed.length ? ' <span class="ok">경상 회복: ' + rep.healed.map(nm).join(', ') + '</span>' : '') + '</li>');
+    for (const e of rep.evac) li.push('<li>' + nm(e.key) + ' 후송 — ' + (e.heavy ? '72시간 안에 돌아오지 못한다.' : '작전 ' + (e.back + 1) + ' 앞 재정비에서 복귀 예정.') + '</li>');
+    for (const k of rep.kept) li.push('<li class="warn">' + nm(k.key) + ' — ' + INJ[k.injury] + ' 상태로 계속 근무.</li>');
+    for (const r of rep.recruits) { const d = C().crewName(r.key, s); li.push('<li>보충병 <b>' + esc(d.name) + ' ' + d.rank + '</b> → ' + r.tank + '호차 ' + ROLE_NAME(r.role) + ' <span class="sub">(' + esc(d.type) + ' · ' + esc(d.about.split(' — ')[1] || '') + ')</span></li>'); }
+    for (const m of rep.moved) li.push('<li>' + nm(m.key) + ' → ' + m.to + '호차 ' + ROLE_NAME(m.role) + (m.from ? ' (' + m.from + '호차에서)' : ' (후방 대기에서)') + '</li>');
+    if (rep.autoFilled.length) li.push('<li class="warn">빈 필수 자리를 보충병으로 채움: ' + rep.autoFilled.join(', ') + '</li>');
+    const threeMan = C().aliveIds(s).filter((id) => s.tanks[id].model !== 'K2' && !s.crew[id].members.some((m) => m.role === 'loader'));
+    if (threeMan.length) li.push('<li class="warn">' + threeMan.map((id) => id + '호차').join('·') + ' — 탄약수 없이 3명. 포수가 장전하므로 장전이 느리다.</li>');
+    open(
+      '<div class="s-kicker">재정비 완료 · ' + hrs(rep.used) + ' / ' + hrs(rep.hours) + ' 사용</div>' +
+      '<div class="c-res success">작전 ' + (s.op + 1) + ' 준비 완료</div>' +
+      '<ul class="c-news">' + li.join('') + '</ul>' +
       '<div class="c-nav"><span class="c-gap">자동 저장됨</span><button type="button" class="r-btn" data-next data-focus>작전 ' + (s.op + 1) + ' 명령 받기 ▸</button></div>',
       'refit'
     );
-    on('[data-next]', () => { s.refitPending = false; C().save(s); orders(s); });
+    on('[data-next]', () => orders(s));
   }
 
   // ---------------------------------------------------------------- 엔딩

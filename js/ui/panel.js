@@ -52,7 +52,7 @@ TMM.Panel = (function () {
       btn.innerHTML =
         '<span class="chip"></span>' +
         '<span class="r-name">' + esc(u.callsign) + '</span>' +
-        '<span class="r-role">' + esc(u.role) + '</span>' +
+        '<span class="r-role">' + esc(u.role + (u.leaderAboard && u.id !== 1 ? ' · 소대장 동승' : '')) + '</span>' +
         '<span class="r-cond"></span>' +
         '<span class="r-state"></span>' +
         '<span class="r-cmd"></span>';
@@ -119,7 +119,7 @@ TMM.Panel = (function () {
       '<div class="unit-head team-' + u.team + '">' +
       '<span class="u-num">' + u.id + '</span>' +
       '<div><div class="u-call">' + esc(u.callsign) + ' <span class="u-radio">' + esc(TMM.RADIO.call(u)) + '</span></div>' +
-      '<div class="u-sub">' + esc(u.model) + ' · ' + esc(u.role) + ' · ' + esc(team.name) + '</div></div>' +
+      '<div class="u-sub">' + esc(u.model) + ' · ' + esc(u.role + (u.leaderAboard && u.id !== 1 ? ' · 소대장 동승' : '')) + ' · ' + esc(team.name) + '</div></div>' +
       '</div>' + crewHTML(game, u) + combat + '<dl class="kv">' + rows.join('') + '</dl>'
     );
   }
@@ -145,13 +145,17 @@ TMM.Panel = (function () {
         '</div>');
     }
     out.push('<div class="crew-cards">');
-    for (const role of TMM.CREW_ROLE_ORDER) {
+    for (const role of TMM.VEHICLES[u.model].crewRoles || TMM.CREW_ROLE_ORDER) {
       const m = u.crew.byRole[role];
-      if (!m) continue;
+      if (!m) {
+        // M7b: 빈자리 (3명 K1A2 의 탄약수)
+        out.push('<div class="cw vacant"><div class="cw-head"><span class="cw-role">' + esc(TMM.CREW_ROLES[role].name) + '</span><span class="cw-st warn">없음</span></div><div class="cw-name sub">' + (role === 'loader' ? '포수가 대신 장전 — 느림' : '공석') + '</div></div>');
+        continue;
+      }
       const st = TMM.Crew.statusWord(m);
       const stCls = m.injury >= 2 ? 'bad' : m.injury || m.shaken ? 'warn' : st ? 'dim' : '';
       out.push('<div class="cw' + (m.injury >= 2 ? ' hurt2' : m.injury ? ' hurt1' : '') + (u.destroyed ? ' dead' : '') + '" title="' + esc(m.about + ' · ' + TMM.CREW_ROLES[role].effect) + '">' +
-        '<div class="cw-head"><span class="cw-role">' + esc(TMM.CREW_ROLES[role].name) + '</span>' + (st ? '<span class="cw-st ' + stCls + '">' + esc(st) + '</span>' : '') + '</div>' +
+        '<div class="cw-head"><span class="cw-role">' + esc(TMM.CREW_ROLES[role].name) + '</span>' + (st ? '<span class="cw-st ' + stCls + '">' + esc(st) + '</span>' : m.trained && m.trained !== role && !m.player ? '<span class="cw-st warn">' + esc(TMM.CREW_ROLES[m.trained].name) + ' 출신</span>' : m.recruit ? '<span class="cw-st dim">보충병</span>' : '') + '</div>' +
         '<div class="cw-name">' + esc(m.player ? '소대장 (나)' : m.name) + ' <span class="sub">' + esc(m.rank) + '</span></div>' +
         '<div class="cw-stats">' +
         (m.player ? '<span class="cw-k">숙련</span><span class="cw-na sub">직접 조작</span>' : '<span class="cw-k">숙련</span>' + bar('sk', m.skill, '숙련도')) +

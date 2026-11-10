@@ -830,6 +830,65 @@ button {
 .c-hist tr.fail td:nth-child(3) { color: var(--accent); }
 .c-hist tr.collapse td:nth-child(3) { color: #ff6a50; }
 
+/* ---------- M7b 재정비 선택 ---------- */
+.warn { color: var(--warn); }
+.camp.refit .c-res.success { color: var(--ok); }
+.r-btn[disabled] { opacity: 0.4; cursor: not-allowed; }
+.r-btn[disabled]:hover { background: var(--panel-2); color: var(--accent); }
+.c-k2, .c-k1 { display: inline-block; font-family: var(--mono); font-size: 10.5px; font-weight: 700; padding: 0 4px; border: 1px solid var(--line); color: var(--text-dim); letter-spacing: 0.06em; vertical-align: 1px; }
+.c-k2 { border-color: #9fd0ff; color: #9fd0ff; }
+.c-news { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; font-size: 13px; color: var(--text-dim); }
+.c-news li { padding: 4px 8px; border-left: 3px solid var(--line); background: var(--panel); }
+.c-news li.good { border-left-color: var(--ok); }
+.c-news li.bad { border-left-color: #ff8a70; color: var(--text-dim); }
+.c-news li.warn { border-left-color: var(--warn); color: var(--text-dim); }
+.c-news b { color: var(--text); }
+.c-choices { display: grid; gap: 6px; margin-top: 16px; }
+.c-choice { text-align: left; padding: 9px 12px; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--accent); color: var(--text); font: inherit; font-size: 13.5px; cursor: pointer; }
+.c-choice:hover, .c-choice:focus-visible { background: var(--panel-2); border-color: var(--accent); outline: none; }
+.c-picked { margin: 12px 0 8px; color: var(--accent); font-size: 13px; }
+.c-fx { margin: 10px 0 0; font-family: var(--mono); font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.c-time { margin: 12px 0 4px; padding: 8px 12px; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--ok); }
+.c-time.over { border-left-color: #ff6a50; }
+.c-time-h { font-size: 13px; color: var(--text-dim); }
+.c-time-h b { color: var(--text); font-family: var(--mono); letter-spacing: 0.1em; margin-right: 4px; }
+.c-time-h .mono { color: var(--text); font-size: 15px; font-weight: 700; }
+.c-time-bar { height: 8px; margin: 6px 0; background: #0d1009; border: 1px solid var(--line-soft); }
+.c-time-bar i { display: block; height: 100%; background: var(--ok); }
+.c-time.over .c-time-bar i { background: #ff6a50; }
+.c-time-items { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--text-faint); }
+.c-time-items b { color: var(--text-dim); font-weight: 400; }
+.c-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 5px 10px; margin-bottom: 3px; background: var(--panel); border-left: 4px solid var(--team-1); font-size: 12.5px; color: var(--text-dim); }
+.c-row.team-2 { border-left-color: var(--team-2); }
+.c-row.hurt { border-left-color: #ff6a50; }
+.c-row > b { color: var(--text); font-family: var(--mono); }
+.c-row-note { flex-basis: 100%; }
+.c-chk { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; color: var(--text); }
+.c-chk input { accent-color: var(--accent); width: 15px; height: 15px; }
+.c-segs { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-left: auto; }
+.c-sec + .c-segs, .c-ammo-list + .c-sec { margin-left: 0; }
+.c-sec + .c-segs { display: flex; margin: 2px 0 6px; }
+.c-seg { padding: 4px 10px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text-dim); font: inherit; font-size: 12.5px; cursor: pointer; }
+.c-seg .mono { color: var(--text-faint); font-size: 11.5px; }
+.c-seg.on { border-color: var(--accent); color: var(--accent); background: #2a2a14; }
+.c-seg:hover:not([disabled]), .c-seg:focus-visible { border-color: var(--accent); outline: none; }
+.c-seg[disabled] { opacity: 0.35; cursor: not-allowed; }
+.c-rest { min-width: 4.5em; text-align: center; color: var(--text); font-weight: 700; }
+.c-ammo-list { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--text-dim); margin: 2px 0; }
+.c-ammo-t b { color: var(--text); font-family: var(--mono); }
+.c-none { margin: 2px 0; }
+.c-crewcards { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.c-crewcard { padding: 7px 10px; background: var(--panel); border: 1px solid var(--line-soft); border-left: 4px solid var(--team-1); font-size: 12.5px; }
+.c-crewcard.team-2 { border-left-color: var(--team-2); }
+.c-crewcard .c-tank-h { margin-bottom: 4px; color: var(--text-dim); }
+.c-seat { display: grid; grid-template-columns: 3.6em 1fr; gap: 0 6px; align-items: center; margin: 3px 0; }
+.c-seat > span:last-child:not(.c-seat-fixed) { grid-column: 2; font-size: 11.5px; }
+.c-seat select { width: 100%; min-width: 0; background: #0d1009; color: var(--text); border: 1px solid var(--line); font: inherit; font-size: 12.5px; padding: 3px 4px; }
+.c-seat select:focus-visible { outline: 1px solid var(--accent); }
+.c-seat-fixed { color: var(--accent); font-weight: 600; }
+.c-reserve { font-size: 12.5px; color: var(--text-dim); margin: 6px 0 0; }
+.c-reserve b { color: var(--text); }
+
 /* 전투 중 작전 목표 띠 */
 .op-hud {
   position: absolute; left: 10px; bottom: 72px; z-index: 1;
@@ -846,6 +905,8 @@ button {
 @media (max-width: 900px) {
   .c-grid { grid-template-columns: 1fr; }
   .c-tanks { grid-template-columns: 1fr; }
+  .c-crewcards { grid-template-columns: 1fr; }
+  .c-segs { margin-left: 0; }
   .c-say { grid-template-columns: 1fr; gap: 0; }
   .c-say b { text-align: left; }
   .c-say.note { padding-left: 0; }

@@ -122,7 +122,7 @@ TMM.Input = (function () {
       if (digit === '0') return actions.setRoe('free');
       if (ev.code === 'KeyR') return actions.pickOrder('report');
       if (digit && '1234'.includes(digit)) return actions.select(Number(digit)); // 정보 창만 바뀜
-      if (digit || ['KeyM', 'KeyC', 'KeyB', 'KeyT', 'KeyX', 'KeyV'].includes(ev.code)) actions.scopeBlocked();
+      if (digit || ['KeyM', 'KeyC', 'KeyB', 'KeyT', 'KeyX', 'KeyV', 'KeyK'].includes(ev.code)) actions.scopeBlocked();
     }
 
     window.addEventListener('keydown', (ev) => {
@@ -148,7 +148,7 @@ TMM.Input = (function () {
       if (digit === '8') return actions.setRoe('hold');
       if (digit === '9') return actions.setRoe('id');
       if (digit === '0') return actions.setRoe('free');
-      const ORDER_KEYS = { KeyM: 'move', KeyC: 'cover', KeyB: 'bound', KeyT: 'target', KeyW: 'withdraw', KeyS: 'stop', KeyR: 'report' };
+      const ORDER_KEYS = { KeyM: 'move', KeyC: 'cover', KeyB: 'bound', KeyT: 'target', KeyW: 'withdraw', KeyS: 'stop', KeyR: 'report', KeyK: 'support' };
       if (ORDER_KEYS[ev.code]) return actions.pickOrder(ORDER_KEYS[ev.code]);
       if (ev.code === 'KeyQ') return actions.cycleAmmo();
       if (ev.code === 'KeyX') return actions.clearTarget();

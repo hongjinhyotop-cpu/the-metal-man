@@ -129,7 +129,7 @@ TMM.Orders = (function () {
         const p = formationPoint(game, u, o);
         const res = moveUnit(game, u, p.x, p.y, o.type === 'withdraw');
         if (!res.ok) return { ok: false, reason: res.reason };
-        u.order = { type: o.type, x: u.dest.x, y: u.dest.y };
+        u.order = { type: o.type, x: u.dest.x, y: u.dest.y, grp: o.count > 1 ? o.type + '@' + o.x.toFixed(1) + ',' + o.y.toFixed(1) : null }; // M7b grp: 같이 받은 조 이동 (보조 맞추기)
         u.watch = null;
         u.selfMove = false;
         return { ok: true, res };
@@ -363,8 +363,32 @@ TMM.Orders = (function () {
     }
   }
 
+  // M7b 혼성 소대: K2 와 K1A2 가 같이 움직이는 조 단위 명령(엄호 이동, 여러 대에게 준 이동·철수)에서는
+  // 빠른 전차가 느린 전차에 보조를 맞춘다 (unit.paceMul → Damage.speedMul). 같은 차종끼리는 그대로.
+  function updatePace(game) {
+    const groups = new Map();
+    const b = game.bound;
+    for (const u of game.units) {
+      u.paceMul = 1;
+      if (u.destroyed || u.state !== 'moving' || u.selfMove) continue;
+      let key = null;
+      if (u.order.type === 'bound' && b && b.members.has(u.id) && u.team === b.moving) key = 'bound';
+      else if ((u.order.type === 'move' || u.order.type === 'withdraw') && u.order.grp) key = u.order.grp;
+      if (!key) continue;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(u);
+    }
+    for (const list of groups.values()) {
+      if (list.length < 2 || new Set(list.map((u) => u.model)).size < 2) continue;
+      const pots = list.map((u) => TMM.Damage.potential(u));
+      const min = Math.min(...pots);
+      list.forEach((u, i) => { if (pots[i] > min * 1.02) u.paceMul = min / pots[i]; });
+    }
+  }
+
   function update(game, gdt) {
     updateBound(game);
+    updatePace(game);
     const now = game.gameSeconds;
     for (const u of game.units) {
       if (u.destroyed) continue;

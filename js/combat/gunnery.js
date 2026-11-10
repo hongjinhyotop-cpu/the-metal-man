@@ -50,7 +50,7 @@ TMM.Gunnery = (function () {
 
   // M7a: 새 표적을 잡을 때 승무원이 탄종을 고른다 — 가려진 표적·차체 엄폐 표적이 2km 안이면 고폭탄, 아니면 철갑탄.
   // 소대장이 Q 로 직접 바꾼 1호차는 2분 동안 그대로 둔다(ammoPinnedUntil). 탄을 바꿔 넣는 시간은 새 표적 조준 시간에 포함.
-  const choosesAmmo = (game, unit) => unit.side === 'friend' && !unit.ally && unit.model === 'K1A2' && !(unit.ammoPinnedUntil != null && game.gameSeconds < unit.ammoPinnedUntil);
+  const choosesAmmo = (game, unit) => unit.side === 'friend' && (!unit.ally || unit.support) && TMM.VEHICLES[unit.model].ammoTypes.length > 1 && !(unit.ammoPinnedUntil != null && game.gameSeconds < unit.ammoPinnedUntil);
   // 표적을 고를 때 쓰는 사거리: 탄종을 스스로 고르는 전차는 남은 탄 중 가장 긴 사거리
   function reach(game, unit) {
     if (!choosesAmmo(game, unit)) return TMM.AMMO[unit.ammoType].rangeM;
@@ -204,6 +204,7 @@ TMM.Gunnery = (function () {
   function update(game, gdt, events) {
     const rand = game.rand || Math.random;
     for (const u of game.units) updateUnit(game, u, gdt, events, rand);
+    for (const a of game.allies) if (a.support && !a.exited) updateUnit(game, a, gdt, events, rand); // M7b: 흑표 지원 K2
     for (const e of game.enemies) updateUnit(game, e, gdt, events, rand);
   }
 

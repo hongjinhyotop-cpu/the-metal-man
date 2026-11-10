@@ -95,7 +95,9 @@ TMM.VEHICLES = {
     size: 1,
     gun: '120mm 활강포',
     ammoLoad: { K276: 20, K277: 12 }, // 합계 32발. 탄종 배분은 게임용 추정치
+    ammoMax: 32,
     ammoTypes: ['K276', 'K277'],
+    crewRoles: ['cmdr', 'gunner', 'loader', 'driver'], // M7b: 좌석 (탄약수가 비면 포수가 장전 — 느려짐)
     reloadSec: 7, // 게임용 추정치: 수동 장전 약 7초
     aimSec: 4, // 게임용 추정치: 새 표적 조준·거리 측정
     moveFireMul: 0.8, // 기동 간 사격 시 명중 배수 (2축 안정화)
@@ -121,7 +123,10 @@ TMM.VEHICLES = {
     killOnPen: 0.65, // 포탑 바닥·차체 안 탄약 적재로 유폭 위험 큼 — 게임용 추정치
     turnDegPerSec: 20,
   },
-  // ---- M3: 플레이어가 지휘하지 않는 아군 (사격하지 않음) ----
+  // ---- K2 ----
+  // M3: 인접 중대 K2 (지나가기만 함, 사격 안 함). M7b: 대대가 보충해 주는 소대 K2 와 이웃 중대 '흑표' 지원 K2 가 같은 수치를 쓴다.
+  // 공개 자료: 120mm 55구경장 활강포, 자동장전장치(승무원 3명: 전차장·포수·조종수), 기동 간 사격 능력 우수, 기동력 향상.
+  // 이 게임의 K2 는 능동방호장치가 없는 기존 양산형으로 가정한다. 숫자는 모두 게임용 추정치.
   K2: {
     id: 'K2',
     name: 'K2',
@@ -129,15 +134,20 @@ TMM.VEHICLES = {
     iff: true, // 피아식별장치 → 탐지 즉시 아군으로 표시
     size: 1,
     gun: '120mm 55구경장 활강포',
-    ammoLoad: {},
-    ammoTypes: [],
-    reloadSec: 5,
-    aimSec: 3,
-    moveFireMul: 0.85,
+    ammoLoad: { K276: 24, K277: 16 }, // 합계 40발 (게임용 추정치)
+    ammoMax: 40,
+    ammoTypes: ['K276', 'K277'],
+    reloadSec: 4.5, // 자동장전: 탄약수가 없고 장전 속도가 일정하다 (게임용 추정치)
+    autoloader: true,
+    aimSec: 3.5,
+    hitMul: 1.08, // 55구경장: 원거리 탄도가 곧다 (게임용 추정치)
+    moveFireMul: 0.92, // 기동 간 사격 우수
     targetMoveMul: 0.75,
     canFireOnMove: true,
-    killOnPen: 0.25,
+    speedMul: 1.18, // 지형별 K1A2 속도 대비 (게임용 추정치)
+    killOnPen: 0.5,
     turnDegPerSec: 30,
+    crewRoles: ['cmdr', 'gunner', 'driver'],
   },
   TRUCK: {
     id: 'TRUCK',

@@ -30,10 +30,10 @@ TMM.Radio = (function () {
     }
   }
 
-  // 지휘 전차: 1호차. 격파되면 부소대장차(4호차)가 지휘를 넘겨받는다.
+  // 지휘 전차: 소대장이 탄 전차(leaderAboard, 보통 1호차). 1호차가 격파되면 소대장은 부소대장차(4호차)로 옮겨 탄다 (M7b, battle.js).
   function controlUnit(game) {
     const alive = game.units.filter((u) => !u.destroyed);
-    return alive.find((u) => u.id === 1) || alive.find((u) => u.id === 4) || alive[0] || null;
+    return alive.find((u) => u.leaderAboard) || alive.find((u) => u.id === 1) || alive.find((u) => u.id === 4) || alive[0] || null;
   }
 
   const call = (u) => R().call(u);
@@ -133,7 +133,8 @@ TMM.Radio = (function () {
     const ctrl = controlUnit(game);
     if (ctrl && ctrl.id !== net.control) {
       net.control = ctrl.id;
-      emit(events, call(ctrl), R().NET + ', 여기 ' + call(ctrl) + '. 강철 1 피격. 지금부터 본 차가 소대를 지휘한다. 이상.', 'warn');
+      // M7b: 소대장이 이 전차로 옮겨 탔다 (battle.js transferLeader)
+      emit(events, call(ctrl), R().NET + ', 여기 ' + call(ctrl) + '. 소대장님 본 차에 탑승. 지휘는 본 차에서 계속한다. 이상.', 'warn');
     }
 
     if (net.timers.length) {

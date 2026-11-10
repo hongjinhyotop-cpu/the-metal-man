@@ -123,14 +123,22 @@ TMM.Renderer = (function () {
     ctx.textBaseline = 'middle';
     ctx.fillText(String(unit.id), W / 2 + 5.5, -H / 2 - 2.2);
 
-    // 지휘 차량 표시 (소대장차 깃대, 부소대장차 짧은 깃대)
-    if (unit.role === '소대장차' || unit.role === '부소대장차') {
+    // 지휘 차량 표시 (소대장이 탄 전차는 긴 깃대, 부소대장차 짧은 깃대). M7b: 1호차를 잃으면 소대장이 옮겨 탄 전차에 긴 깃대
+    if (unit.leaderAboard || unit.role === '소대장차' || unit.role === '부소대장차') {
       ctx.strokeStyle = team.color;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(-W / 2, -H / 2);
-      ctx.lineTo(-W / 2, -H / 2 - (unit.role === '소대장차' ? 10 : 6));
+      ctx.lineTo(-W / 2, -H / 2 - (unit.leaderAboard && !unit.destroyed ? 10 : 6));
       ctx.stroke();
+    }
+    // M7b: K2 는 기호 안에 'K2'
+    if (unit.model === 'K2') {
+      ctx.fillStyle = team.color;
+      ctx.font = '700 8px ' + FONT_MONO;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('K2', 0, 0.5);
     }
     if (unit.hullDown && !unit.destroyed) {
       // 차체 엄폐: 기호 아래에 둔덕 모양 (녹색 반원)
@@ -331,7 +339,7 @@ TMM.Renderer = (function () {
     }
     ctx.stroke();
     // 꼬리표
-    const tag = c.cls === 'infantry' ? '보' : c.cls === 'truck' ? '트' : 'K2';
+    const tag = c.cls === 'infantry' ? '보' : c.cls === 'truck' ? '트' : u.support ? '흑표' : 'K2'; // M7b: 이웃 중대 지원 K2
     ctx.font = '700 10px ' + FONT_MONO;
     const tw = Math.max(13, ctx.measureText(tag).width + 5);
     ctx.fillStyle = color;

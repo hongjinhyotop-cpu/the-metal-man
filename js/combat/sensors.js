@@ -14,6 +14,10 @@ TMM.SENSORS = {
     day: { detect: 3500, idBase: 3.0, hitMul: 1 },
     night: { detect: 3500, idBase: 2.4, hitMul: 1 }, // 열상 장비: 밤에는 열 대비가 커서 오히려 식별이 빠름
   },
+  K2: { // M7b: 소대 K2·흑표 지원 K2 (K1A2 와 같은 급의 열상·전장관리체계로 가정)
+    day: { detect: 3600, idBase: 2.8, hitMul: 1 },
+    night: { detect: 3600, idBase: 2.2, hitMul: 1 },
+  },
   CHONMA: {
     day: { detect: 3000, idBase: 3.5, hitMul: 1 },
     night: { detect: 2300, idBase: 8, hitMul: 0.85 }, // 열상 장비 없음: 밤에는 탐지·식별·사격이 떨어짐 (M4: 1800/12/0.7 → 2300/8/0.85, 야간이 너무 쉬웠음)

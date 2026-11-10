@@ -1,5 +1,7 @@
-// M7a 모의 캠페인 (개발용, 게임에는 쓰이지 않음). Node 로 실행:
-//   node tools/sim-campaign.js <good|scope|passive> [횟수] [시드]
+// 모의 캠페인 (개발용, 게임에는 쓰이지 않음). Node 로 실행:
+//   node tools/sim-campaign.js <good|scope|passive> [횟수] [시드] [재정비: rec|idle] [흑표 지원: 1|0]
+//   재정비 rec = '추천대로 하기'(Campaign.recommend), idle = 아무것도 안 함(필수 자리만 보충병). 기본: passive 는 idle, 나머지는 rec.
+//   흑표 지원 기본: good 만 1 (보이는 적 쪽 / 공격 작전은 목표 쪽으로 한 번 요청)
 //   good: 엄호 방향·표적 지정·단계적 이동/엄호 이동 / scope: 조준 화면에만(무전 명령 없음, 공격 작전에서는 1호차만 몰고 감) / passive: 아무것도 안 함
 // 결과: 캠페인마다 작전별 결과(s 성공·f 실패·c 소대 붕괴, -손실, k격파/적 수, 걸린 분)와 엔딩, 마지막에 합계.
 // 모의 캠페인: 전략별로 5개 작전을 이어서 돌린다.
@@ -131,8 +133,22 @@ function scopeBot(g, st, realDt) {
   }
 }
 
+// M7b: 흑표(이웃 K2 중대) 지원 요청 — 방어형 작전은 처음 보이는 적 쪽, 공격 작전은 시작 1분 뒤 목표 쪽
+function callSupport(g, st) {
+  if (!st.support || g.support.state !== 'ready') return;
+  if (g.op.objective.type === 'attack') {
+    if (at(g) < 60) return;
+    const z = g.op.marks[0];
+    TMM.Support.request(g, (z.x0 + z.x1) / 2, (z.y0 + z.y1) / 2);
+    return;
+  }
+  for (const c of g.intel.friend.contacts.values()) {
+    if (c.visible && c.identified && c.kind === 'hostile' && !c.wreck) { TMM.Support.request(g, c.lastX, c.lastY); return; }
+  }
+}
+
 const STRATS = {
-  good: (g, st) => GOOD[g.op.key](g, st),
+  good: (g, st) => { callSupport(g, st); GOOD[g.op.key](g, st); },
   scope: (g, st, realDt) => {
     st.findDelay = 0.7; st.hold = 1.3;
     // 공격 작전: 다른 전차에는 명령하지 않고, 1호차만 (지도를 잠깐 열어 클릭해) 목표 쪽으로 몰고 간다
@@ -151,8 +167,10 @@ const STRATS = {
   passive: () => {},
 };
 
-function runCampaign(strat, seed) {
+function runCampaign(strat, seed, refitMode, support) {
   const rand = mulberry(seed);
+  refitMode = refitMode || (strat === 'passive' ? 'idle' : 'rec');
+  if (support == null) support = strat === 'good';
   const s = TMM.Campaign.newState(); s.phase = 'briefing';
   const ops = [];
   while (s.phase !== 'ending') {
@@ -160,7 +178,7 @@ function runCampaign(strat, seed) {
     const op = TMM.Campaign.battleSpec(s);
     const g = TMM.Battle.create({ op, map, crew: s.crew, rand });
     g.started = true;
-    const st = { tgtAt: {} };
+    const st = { tgtAt: {}, support };
     while (!g.over) {
       const combat = TMM.Battle.inCombat(g);
       const realDt = 0.5 / (combat ? 3 : 10);
@@ -168,11 +186,11 @@ function runCampaign(strat, seed) {
       TMM.Battle.step(g, 0.5);
       if (g.gameSeconds - g.startSeconds > 7200) { console.log('TIMEOUT'); break; }
     }
-    ops.push({ no: op.no, r: g.over.result[0], lost: g.units.filter((u) => u.destroyed).length, kills: g.enemies.filter(e=>e.destroyed&&!e.abandoned).length, n: g.enemies.length, min: Math.round((g.over.at - g.startSeconds)/60) });
+    ops.push({ no: op.no, r: g.over.result[0], lost: g.units.filter((u) => u.destroyed).length, kills: g.enemies.filter(e=>e.destroyed&&!e.abandoned).length, n: g.enemies.length, min: Math.round((g.over.at - g.startSeconds)/60), k2: g.units.filter((u) => u.model === 'K2').length, sup: g.support.state });
     TMM.Campaign.record(s, g);
-    if (s.refitPending) s.refitPending = false;
+    if (s.refitPending) TMM.Campaign.autoRefit(s, refitMode, rand);
   }
-  return { ops, ending: s.ending, alive: TMM.Campaign.aliveIds(s).length };
+  return { ops, ending: s.ending, alive: TMM.Campaign.aliveIds(s).length, k2: s.k2Count };
 }
 
 module.exports = { TMM, map, STRATS, mulberry, runCampaign };
@@ -180,13 +198,15 @@ if (require.main === module) {
 const strat = process.argv[2] || 'good';
 const N = Number(process.argv[3] || 10);
 const seed0 = Number(process.argv[4] || 1);
-const per = {}; const endings = {}; let aliveSum = 0;
+const refitMode = process.argv[5] || null;
+const support = process.argv[6] == null ? null : process.argv[6] === '1';
+const per = {}; const endings = {}; let aliveSum = 0, k2Sum = 0;
 for (let i = 0; i < N; i++) {
-  const r = runCampaign(strat, seed0 + i * 7919);
-  endings[r.ending] = (endings[r.ending] || 0) + 1; aliveSum += r.alive;
-  console.log(strat, i, r.ending, 'alive', r.alive, r.ops.map((o) => o.no + o.r + '(-' + o.lost + ' k' + o.kills + '/' + o.n + ' ' + o.min + 'm)').join(' '));
+  const r = runCampaign(strat, seed0 + i * 7919, refitMode, support);
+  endings[r.ending] = (endings[r.ending] || 0) + 1; aliveSum += r.alive; k2Sum += r.k2;
+  console.log(strat, i, r.ending, 'alive', r.alive, 'K2', r.k2, r.ops.map((o) => o.no + o.r + '(-' + o.lost + ' k' + o.kills + '/' + o.n + ' ' + o.min + 'm' + (o.k2 ? ' K2×' + o.k2 : '') + (o.sup !== 'ready' ? ' 흑표:' + o.sup : '') + ')').join(' '));
   for (const o of r.ops) { const p = per[o.no] = per[o.no] || { n: 0, s: 0, f: 0, c: 0, lost: 0 }; p.n++; p[o.r]++; p.lost += o.lost; }
 }
-console.log('ENDINGS', JSON.stringify(endings), 'avg alive', (aliveSum / N).toFixed(2));
+console.log('ENDINGS', JSON.stringify(endings), 'avg alive', (aliveSum / N).toFixed(2), 'avg K2', (k2Sum / N).toFixed(2));
 for (const k in per) { const p = per[k]; console.log('op', k, 'played', p.n, 'success', p.s, 'fail', p.f, 'collapse', p.c, 'avg lost', (p.lost / p.n).toFixed(2)); }
 }

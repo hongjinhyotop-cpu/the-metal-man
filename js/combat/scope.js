@@ -68,9 +68,10 @@ TMM.Scope = (function () {
   const EYE_H = 3.0;
 
   function init(game) {
+    const lead = game.units.find((u) => u.leaderAboard && !u.destroyed) || game.units.find((u) => u.id === 1) || game.units[0];
     game.scope = {
       open: false,
-      unitId: 1,
+      unitId: lead ? lead.id : 1, // M7b: 소대장이 탄 전차 (1호차가 없으면 4호차)
       az: -Math.PI / 2, // 포탑(조준경)이 보는 방향
       zoom: 0,
       pitch: 0, // 화면 가운데의 앙각 (위 +)
@@ -352,12 +353,13 @@ TMM.Scope = (function () {
     return { ok: true, target: hit.t, res, ammoId };
   }
 
-  // 지도 화면의 1호차 포수 혼자 (Gunnery 가 부름)
+  // 지도 화면의 1호차 포수 혼자 (Gunnery 가 부름). 전차장 자리에 소대장이 앉은 전차만 (4호차로 옮겨 타도 장만석 상사가 전차장)
+  const playerCmdr = (u) => !!(u.crew && u.crew.byRole.cmdr && u.crew.byRole.cmdr.player);
   function autoAimMul(game, u) {
-    return u.id === 1 && u.crew && !isManual(game, u) ? K().AUTO_AIM_MUL : 1;
+    return playerCmdr(u) && !isManual(game, u) ? K().AUTO_AIM_MUL : 1;
   }
   function autoHitMul(game, u) {
-    return u.id === 1 && u.crew && !isManual(game, u) ? K().AUTO_HIT_MUL : 1;
+    return playerCmdr(u) && !isManual(game, u) ? K().AUTO_HIT_MUL : 1;
   }
 
   // 식별 시간 배수 (Intel.pairVis 가 부름): 조준경 시야 안의 표적은 크게 보여 빨리 식별된다

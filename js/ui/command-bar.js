@@ -32,6 +32,8 @@ TMM.CommandBar = (function () {
     { id: 'withdraw', label: '철수', key: 'W', hint: '물러날 위치를 클릭하십시오. 처음 400m 는 정면을 적에게 둔 채 후진합니다.' },
     { id: 'stop', label: '정지', key: 'S' },
     { id: 'report', label: '상황 보고', key: 'R' },
+    // M7b: 이웃 K2 중대(흑표) 지원 요청 — 작전마다 한 번
+    { id: 'support', label: '흑표 지원', key: 'K', hint: '흑표(이웃 K2 중대)가 지켜 줄 방향(지점)을 클릭하십시오. 작전마다 한 번, 거절될 수도 있습니다.' },
   ];
 
   const ROE_KEYS = { hold: '8', id: '9', free: '0' };
@@ -86,7 +88,7 @@ TMM.CommandBar = (function () {
     exec: '실행 준비',
   };
 
-  const ORDER_NAME = { move: '이동', cover: '엄호', bound: '엄호 이동', target: '목표 지정', withdraw: '철수', stop: '정지', report: '상황 보고', roe: '사격 통제' };
+  const ORDER_NAME = { support: '흑표 지원 요청', move: '이동', cover: '엄호', bound: '엄호 이동', target: '목표 지정', withdraw: '철수', stop: '정지', report: '상황 보고', roe: '사격 통제' };
 
   function update(game) {
     const cmd = game.cmd;
@@ -127,6 +129,19 @@ TMM.CommandBar = (function () {
         els.orders[o.id].classList.toggle('on', on);
       }
     }
+    // M7b: 흑표 지원 버튼 — 상태 (작전마다 1번·응답 기다림·도착 몇 분 전·엄호 중·거절됨)
+    if (game.support && els.orders.support) {
+      const st = TMM.Support.status(game);
+      const b = els.orders.support;
+      if (cache.get('sup') !== st) {
+        cache.set('sup', st);
+        b.title = '흑표(이웃 K2 중대) 지원 요청 — ' + st;
+        b.classList.toggle('used', game.support.state !== 'ready');
+        let tag = b.querySelector('.sup-st');
+        if (!tag) { tag = document.createElement('span'); tag.className = 'sup-st'; b.appendChild(tag); }
+        tag.textContent = st;
+      }
+    }
     // 받는 전차들의 사격 통제가 모두 같으면 그 단계를 표시
     const units = TMM.Command.recipients(game, cmd.to);
     const roes = new Set(units.map((u) => u.roe));
@@ -142,7 +157,8 @@ TMM.CommandBar = (function () {
     let hint;
     const name = TMM.Command.specName(game, cmd.to);
     const viaRadio = units.some((u) => u !== ctrl);
-    if (scoped) hint = '조준 화면 중 — 무전 명령 불가. 8·9·0 사격 통제와 R 상황 보고만 소대 전체에 보냅니다. Tab 으로 지도에 돌아가야 지휘할 수 있습니다.';
+    if (cmd.mode === 'support') hint = '▶ ' + ORDER_NAME.support + ' — ' + orderHint('support') + ' (Esc 취소)';
+    else if (scoped) hint = '조준 화면 중 — 무전 명령 불가. 8·9·0 사격 통제와 R 상황 보고만 소대 전체에 보냅니다. Tab 으로 지도에 돌아가야 지휘할 수 있습니다.';
     else if (cmd.mode) hint = '▶ ' + name + ' · ' + ORDER_NAME[cmd.mode] + ' — ' + orderHint(cmd.mode) + ' (Esc 취소)';
     else if (!units.length) hint = name + ' — 명령을 받을 전차가 없습니다.';
     else if (viaRadio) hint = name + '에게 무전으로 명령합니다. 몇 초 뒤 도착하고 "수신" 응답 뒤 실행합니다.' + (game.paused ? ' 일시정지 중에는 송신 대기 — 재개하면 전달 시작.' : '');

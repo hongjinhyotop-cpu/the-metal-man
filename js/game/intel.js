@@ -37,7 +37,7 @@ TMM.Intel = (function () {
   }
 
   function observers(game, side) {
-    const list = side === 'friend' ? game.units : game.enemies;
+    const list = side === 'friend' ? game.units.concat(game.allies.filter((a) => a.support)) : game.enemies; // M7b: 흑표 지원 K2 도 전장관리체계로 본 것을 나눈다
     return list.filter((u) => !u.destroyed && !u.exited && TMM.SENSORS[u.model]);
   }
 

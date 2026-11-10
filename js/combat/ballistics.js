@@ -49,6 +49,7 @@ TMM.Ballistics = (function () {
     const veh = TMM.VEHICLES[shooter.model];
     const d = distanceM(map, shooter, target);
     let p = curve(ammo.hit, d);
+    if (veh.hitMul && d > 1000) p *= 1 + (veh.hitMul - 1) * Math.min(1, (d - 1000) / 1000); // M7b: K2 55구경장은 원거리에서 낫다
     if (isMoving(shooter)) p *= veh.moveFireMul;
     const manual = mods && mods.manual; // M6: 조준 화면 수동 사격
     // 움직이는 표적: 레이저로 잰 수동 사격은 사격통제장치가 리드를 자동 계산한다
