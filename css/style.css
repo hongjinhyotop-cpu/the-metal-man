@@ -18,6 +18,8 @@
   --team-2: #6fc7bf;
   --warn: #e0805a;
   --ok: #9cc46a;
+  --enemy: #e0563f;
+  --dead: #7d7a6a;
   --font: "IBM Plex Sans KR", "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "Consolas", monospace;
 }
@@ -89,6 +91,7 @@ button {
   color: var(--ok);
 }
 .run-state.paused { border-color: var(--warn); color: var(--warn); }
+.run-state.combat { border-color: var(--enemy); color: #fff; background: rgba(224, 86, 63, 0.35); }
 
 .speed { display: flex; }
 .speed button {
@@ -227,7 +230,7 @@ button {
 .roster-item {
   width: 100%;
   display: grid;
-  grid-template-columns: 10px 52px 1fr;
+  grid-template-columns: 10px 52px 1fr auto;
   grid-template-rows: auto auto;
   column-gap: 8px;
   align-items: center;
@@ -243,7 +246,7 @@ button {
 .roster-item.team-2 .chip { background: var(--team-2); }
 .r-name { font-weight: 700; }
 .r-role { font-size: 12px; color: var(--text-dim); }
-.r-state { grid-column: 2 / 4; font-size: 12px; color: var(--text-faint); font-family: var(--mono); }
+.r-state { grid-column: 2 / 5; font-size: 12px; color: var(--text-faint); font-family: var(--mono); }
 
 /* 무전 기록 */
 .radio-log {
@@ -267,6 +270,123 @@ button {
 .radio-log .log-order b { color: var(--accent); }
 .radio-log .log-warn b, .radio-log .log-warn span { color: var(--warn); }
 .radio-log .log-system b { color: var(--team-2); }
+.radio-log .log-fire span { color: var(--text); }
+.radio-log .log-kill b, .radio-log .log-kill span { color: #ffd36a; font-weight: 600; }
+.radio-log .log-loss b, .radio-log .log-loss span { color: #ff6a50; font-weight: 700; }
+
+/* 전투 상태 (선택 전차) */
+.combat {
+  border: 1px solid var(--line-soft);
+  background: var(--panel);
+  padding: 7px 8px;
+  margin-bottom: 8px;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+.cb-row { display: grid; grid-template-columns: 76px 1fr; gap: 10px; align-items: baseline; }
+.cb-k { color: var(--text-faint); }
+.cb-big { font-size: 18px; font-weight: 700; }
+.cb-big.low { color: var(--warn); }
+.combat .sub { color: var(--text-dim); font-size: 12px; font-weight: 400; }
+.ammo-types { display: grid; gap: 3px; margin: 1px 0 3px; }
+.ammo {
+  display: grid;
+  grid-template-columns: 12px 1fr 28px;
+  grid-template-rows: auto 4px;
+  column-gap: 6px;
+  row-gap: 2px;
+  padding: 3px 6px;
+  border: 1px solid var(--line-soft);
+  color: var(--text-dim);
+}
+.ammo.on { border-color: var(--accent); color: var(--text); background: var(--panel-2); }
+.ammo.empty { opacity: 0.5; }
+.a-mark { color: var(--accent); font-size: 10px; }
+.a-name { font-family: var(--mono); font-size: 12.5px; }
+.a-cnt { text-align: right; font-weight: 700; }
+.a-bar { grid-column: 2 / 4; height: 4px; background: var(--line-soft); }
+.a-bar i { display: block; height: 100%; background: var(--text-dim); }
+.ammo.on .a-bar i { background: var(--accent); }
+.parts { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; margin-top: 3px; }
+.part {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 3px 1px;
+  border: 1px solid var(--line-soft);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  text-align: center;
+  line-height: 1.25;
+  word-break: keep-all;
+}
+.part b { font-size: 11px; color: var(--ok); font-weight: 600; }
+.part.bad { border-color: var(--enemy); background: rgba(224, 86, 63, 0.15); }
+.part.bad b { color: #ff7a60; }
+
+.combat .cond { justify-self: start; }
+.cond { font-family: var(--mono); font-size: 12px; font-weight: 700; padding: 0 5px; border: 1px solid currentColor; }
+.cond-ok { color: var(--ok); }
+.cond-warn { color: var(--accent); }
+.cond-bad { color: var(--warn); }
+.cond-dead { color: #ff6a50; }
+.r-cond { grid-row: 1; grid-column: 4; }
+.roster-item.dead { opacity: 0.6; }
+.roster-item.dead .chip { background: var(--dead); }
+
+/* 적 현황 */
+.enemy-roster { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 12.5px; }
+.enemy-roster li { display: grid; grid-template-columns: 16px auto 1fr; gap: 8px; align-items: center; }
+.e-tag {
+  width: 16px; height: 16px; display: grid; place-items: center;
+  background: var(--enemy); color: #1a0a06; font-family: var(--mono); font-weight: 700; font-size: 11px;
+}
+.e-name { font-weight: 600; }
+.e-state { color: var(--text-dim); font-family: var(--mono); font-size: 12px; text-align: right; }
+.enemy-roster li.dead .e-tag { background: var(--dead); }
+.enemy-roster li.dead .e-name, .enemy-roster li.dead .e-state { color: var(--text-faint); text-decoration: line-through; }
+
+/* 결과 화면 */
+.result {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(10, 12, 7, 0.72);
+  z-index: 5;
+}
+.result[hidden] { display: none; }
+.r-box {
+  min-width: 320px;
+  max-width: calc(100% - 32px);
+  padding: 18px 22px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--ok);
+}
+.result.lose .r-box { border-top-color: var(--enemy); }
+.r-title { font-family: var(--mono); font-weight: 700; font-size: 22px; letter-spacing: 0.3em; color: var(--ok); }
+.result.lose .r-title { color: #ff6a50; }
+.r-sub { color: var(--text-dim); margin: 2px 0 12px; }
+.r-stats { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; margin: 0 0 10px; }
+.r-stats dt { color: var(--text-faint); }
+.r-stats dd { margin: 0; font-family: var(--mono); }
+.r-units { list-style: none; margin: 0 0 14px; padding: 8px 0 0; border-top: 1px dashed var(--line-soft); font-size: 12.5px; display: grid; gap: 2px; }
+.r-units li { color: var(--text-dim); padding-left: 8px; border-left: 3px solid var(--team-1); }
+.r-units li.team-2 { border-left-color: var(--team-2); }
+.r-units li.dead { color: var(--text-faint); border-left-color: var(--dead); }
+.r-btn {
+  background: var(--panel-2);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  padding: 6px 18px;
+  font-family: var(--mono);
+  font-weight: 700;
+  cursor: pointer;
+}
+.r-btn:hover { background: var(--accent); color: #12160c; }
+.r-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* 조작법 */
 .keys {

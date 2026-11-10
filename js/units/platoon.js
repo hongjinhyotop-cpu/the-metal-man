@@ -2,7 +2,7 @@
  * 아군 전차 소대 편성.
  *   1조: 1호차(소대장차), 2호차
  *   2조: 3호차, 4호차(부소대장차)
- * 이후 단계(M2 피해, M5 승무원 등)에서 각 전차 객체에 필드를 추가해 나간다.
+ * 전투 필드(탄약·손상)는 TMM.Damage.initCombat 이 붙인다. 이후 단계(M5 승무원 등)에서 각 전차 객체에 필드를 추가해 나간다.
  */
 TMM.TEAMS = {
   1: { name: '1조', color: '#e2c35a', dark: '#5a4c1c' },
@@ -18,12 +18,12 @@ TMM.Platoon = (function () {
   ];
 
   function create() {
-    return ROSTER.map((d) => ({
+    return ROSTER.map((d) => TMM.Damage.initCombat({
       id: d.id,
+      side: 'friend',
       callsign: d.id + '호차',
       role: d.role,
       team: d.team,
-      model: 'K1A2',
       x: d.x,
       y: d.y,
       heading: -Math.PI / 2, // 북쪽을 향함 (라디안, 0 = 동쪽)
@@ -31,7 +31,7 @@ TMM.Platoon = (function () {
       dest: null, // 최종 목적지 {x, y}
       state: 'idle', // 'idle' 정지 | 'moving' 이동 중
       speedKmh: 0,
-    }));
+    }, 'K1A2'));
   }
 
   return { create };

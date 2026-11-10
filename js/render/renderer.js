@@ -1,5 +1,5 @@
 /*
- * 매 프레임 그리기: 지형 레이어 + 이동 경로 + 전차 기호 + 커서 표시.
+ * 매 프레임 그리기: 지형 레이어 + 이동 경로 + 사격선 + 전차 기호(아군·적) + 사격 효과 + 커서 표시.
  * view: 지도 칸 좌표 ↔ 화면 픽셀 변환 정보.
  */
 TMM.Renderer = (function () {
@@ -70,7 +70,7 @@ TMM.Renderer = (function () {
 
   // 전차 기호: 아군 기갑 부대 기호(사각형 + 타원) + 진행 방향 + 호차 번호
   function drawUnit(ctx, view, unit, selected, time) {
-    const team = TMM.TEAMS[unit.team];
+    const team = unit.destroyed ? DEAD_TEAM : TMM.TEAMS[unit.team];
     const p = view.toScreen(unit.x, unit.y);
     const W = 26, H = 17;
     ctx.save();
@@ -128,12 +128,170 @@ TMM.Renderer = (function () {
       ctx.lineTo(-W / 2, -H / 2 - (unit.role === '소대장차' ? 10 : 6));
       ctx.stroke();
     }
+    drawDamageMarks(ctx, unit, W, H);
     ctx.restore();
+  }
+
+  const DEAD_TEAM = { color: '#7d7a6a', dark: '#2a2a22' };
+  const ENEMY_COLOR = '#e0563f';
+
+  // 격파: 굵은 X / 손상: 기호 아래 작은 칸 (궤도·엔진·주포·사통·무전)
+  function drawDamageMarks(ctx, unit, W, H) {
+    if (unit.destroyed) {
+      ctx.strokeStyle = '#e8573f';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-W / 2 - 2, -H / 2 - 2); ctx.lineTo(W / 2 + 2, H / 2 + 2);
+      ctx.moveTo(W / 2 + 2, -H / 2 - 2); ctx.lineTo(-W / 2 - 2, H / 2 + 2);
+      ctx.stroke();
+      return;
+    }
+    const keys = TMM.PART_KEYS;
+    if (!keys.some((k) => unit.damage[k])) return;
+    const s = 4, gap = 1.5, total = keys.length * s + (keys.length - 1) * gap;
+    let x = -total / 2;
+    const y = H / 2 + 4;
+    for (const k of keys) {
+      ctx.fillStyle = unit.damage[k] ? '#e8573f' : 'rgba(150, 160, 120, 0.55)';
+      ctx.fillRect(x, y, s, s);
+      x += s + gap;
+    }
+  }
+
+  // 적 전차 기호: 적대 부대 기호(마름모) + 기갑 타원 + 번호
+  function drawEnemy(ctx, view, e, hovered, targeted) {
+    const p = view.toScreen(e.x, e.y);
+    const R = 13;
+    const color = e.destroyed ? DEAD_TEAM.color : ENEMY_COLOR;
+    ctx.save();
+    ctx.translate(Math.round(p.x), Math.round(p.y));
+
+    if (!e.destroyed) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      const hx = Math.cos(e.heading), hy = Math.sin(e.heading);
+      ctx.moveTo(hx * 12, hy * 12);
+      ctx.lineTo(hx * 22, hy * 22);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = e.destroyed ? 'rgba(30, 28, 24, 0.85)' : 'rgba(40, 12, 8, 0.88)';
+    ctx.beginPath();
+    ctx.moveTo(0, -R); ctx.lineTo(R, 0); ctx.lineTo(0, R); ctx.lineTo(-R, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 6.5, 3.8, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 번호 꼬리표
+    ctx.fillStyle = color;
+    ctx.fillRect(R - 2, -R - 1, 13, 13);
+    ctx.fillStyle = '#1a0a06';
+    ctx.font = '700 11px ' + FONT_MONO;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(e.num), R + 4.5, -R + 5.8);
+
+    if (targeted || hovered) {
+      ctx.strokeStyle = targeted ? 'rgba(255, 120, 90, 0.95)' : 'rgba(245, 235, 190, 0.8)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, R + 6, 0, Math.PI * 2);
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        ctx.moveTo(dx * (R + 3), dy * (R + 3));
+        ctx.lineTo(dx * (R + 10), dy * (R + 10));
+      }
+      ctx.stroke();
+    }
+    drawDamageMarks(ctx, e, 20, 20);
+    ctx.restore();
+  }
+
+  // 선택 전차의 사격선: 지정 목표는 실선, 자동 교전은 점선
+  function drawFireLine(ctx, view, game, unit) {
+    if (!unit || unit.destroyed) return;
+    const tid = unit.fire.targetId != null ? unit.fire.targetId : unit.targetId;
+    const t = game.enemies.find((e) => e.id === tid && !e.destroyed);
+    if (!t) return;
+    const a = view.toScreen(unit.x, unit.y), b = view.toScreen(t.x, t.y);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 120, 90, 0.75)';
+    ctx.lineWidth = 1.5;
+    if (unit.targetId !== t.id) ctx.setLineDash([3, 5]);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // 사거리 원 (선택 전차, 현재 탄종)
+  function drawRange(ctx, view, game, unit) {
+    if (!unit || unit.destroyed) return;
+    const p = view.toScreen(unit.x, unit.y);
+    const r = (TMM.AMMO[unit.ammoType].rangeM / game.map.metersPerCell) * view.scale;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(240, 225, 160, 0.28)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 6]);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // 사격 효과: 예광탄 궤적 + 맞은 곳 섬광
+  function drawFx(ctx, view, game, now) {
+    const life = TMM.CONFIG.FX_SECONDS;
+    for (const f of game.fx) {
+      const k = (now - f.t) / life;
+      if (k < 0 || k > 1) continue;
+      const a = view.toScreen(f.x0, f.y0), b = view.toScreen(f.x1, f.y1);
+      let ex = b.x, ey = b.y;
+      if (!f.hit) {
+        // 빗나간 탄은 표적 옆으로 지나간다
+        const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy) || 1;
+        ex = b.x + (dx / L) * 14 - (dy / L) * 9;
+        ey = b.y + (dy / L) * 14 + (dx / L) * 9;
+      }
+      const head = Math.min(1, k * 4); // 예광탄이 날아가는 정도
+      const tail = Math.max(0, head - 0.35);
+      ctx.save();
+      ctx.globalAlpha = 1 - k;
+      ctx.strokeStyle = f.side === 'friend' ? '#ffe08a' : '#ff8a6a';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(a.x + (ex - a.x) * tail, a.y + (ey - a.y) * tail);
+      ctx.lineTo(a.x + (ex - a.x) * head, a.y + (ey - a.y) * head);
+      ctx.stroke();
+      // 포구 섬광
+      if (k < 0.25) {
+        ctx.fillStyle = '#fff2c0';
+        ctx.beginPath();
+        ctx.arc(a.x, a.y, 5 * (1 - k * 4), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // 피탄
+      if (head >= 1 && f.hit) {
+        const r = f.kill ? 16 : f.pen ? 10 : 6;
+        ctx.fillStyle = f.kill ? '#ff6a2a' : f.pen ? '#ffb347' : '#e8e0c0';
+        ctx.globalAlpha = (1 - k) * 0.9;
+        ctx.beginPath();
+        ctx.arc(ex, ey, r * (0.6 + k), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
   }
 
   function drawCursor(ctx, view, game) {
     const h = game.hover;
-    if (!h || !game.selectedId) return;
+    if (!h || !game.selectedId || game.hoverEnemyId != null) return;
     const info = game.map.infoAt(h.x, h.y);
     if (!info) return;
     const p = view.toScreen(h.x, h.y);
@@ -200,10 +358,16 @@ TMM.Renderer = (function () {
     ctx.textBaseline = 'bottom';
     ctx.fillText('1 km', sx + px1km + 6, sy + 3);
 
-    for (const u of game.units) drawPath(ctx, view, u, u.id === game.selectedId);
-    for (const u of game.units) if (u.id !== game.selectedId) drawUnit(ctx, view, u, false, time);
     const sel = game.units.find((u) => u.id === game.selectedId);
+    drawRange(ctx, view, game, sel);
+    for (const u of game.units) drawPath(ctx, view, u, u.id === game.selectedId);
+    drawFireLine(ctx, view, game, sel);
+    for (const e of game.enemies) if (e.destroyed) drawEnemy(ctx, view, e, e.id === game.hoverEnemyId, false);
+    for (const u of game.units) if (u.destroyed && u.id !== game.selectedId) drawUnit(ctx, view, u, false, time);
+    for (const e of game.enemies) if (!e.destroyed) drawEnemy(ctx, view, e, e.id === game.hoverEnemyId, !!sel && sel.targetId === e.id);
+    for (const u of game.units) if (!u.destroyed && u.id !== game.selectedId) drawUnit(ctx, view, u, false, time);
     if (sel) drawUnit(ctx, view, sel, true, time);
+    drawFx(ctx, view, game, time);
     drawCursor(ctx, view, game);
   }
 

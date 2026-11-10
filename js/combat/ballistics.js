@@ -1,0 +1,124 @@
+/*
+ * 명중·관통·손상 판정.
+ * 한 발을 쏘면: 명중 판정 → 관통 판정 → 부위 손상/격파 판정 순으로 주사위를 굴린다.
+ * 수치는 weapons.js 의 표를 쓴다.
+ */
+TMM.Ballistics = (function () {
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+
+  // [[x, y], ...] 곡선 직선 보간
+  function curve(points, x) {
+    if (x <= points[0][0]) return points[0][1];
+    for (let i = 1; i < points.length; i++) {
+      const [x1, y1] = points[i];
+      if (x <= x1) {
+        const [x0, y0] = points[i - 1];
+        return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
+      }
+    }
+    return points[points.length - 1][1];
+  }
+
+  function distanceM(map, a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y) * map.metersPerCell;
+  }
+
+  function isMoving(u) {
+    return u.state === 'moving';
+  }
+
+  // 표적이 맞는 면: 표적 차체 방향과 '표적→사수' 방향의 각도 차
+  function aspect(target, shooter) {
+    const toShooter = Math.atan2(shooter.y - target.y, shooter.x - target.x);
+    let d = Math.abs(toShooter - target.heading) % (Math.PI * 2);
+    if (d > Math.PI) d = Math.PI * 2 - d;
+    const deg = (d * 180) / Math.PI;
+    if (deg <= 50) return 'front';
+    if (deg >= 130) return 'rear';
+    return 'side';
+  }
+  const ASPECT_NAMES = { front: '정면', side: '측면', rear: '후면' };
+
+  function hitChance(map, shooter, target, ammoId) {
+    const ammo = TMM.AMMO[ammoId];
+    const veh = TMM.VEHICLES[shooter.model];
+    const d = distanceM(map, shooter, target);
+    let p = curve(ammo.hit, d);
+    if (isMoving(shooter)) p *= veh.moveFireMul;
+    if (isMoving(target)) p *= veh.targetMoveMul;
+    if (shooter.damage.fcs) p *= TMM.DAMAGE_EFFECT.fcsHitMul;
+    return clamp(p, 0.02, 0.97);
+  }
+
+  function penChance(map, shooter, target, ammoId, asp) {
+    const tbl = TMM.PENETRATION[ammoId][target.model];
+    const [near, far] = tbl[asp];
+    const d = distanceM(map, shooter, target);
+    const t = clamp((d - 500) / Math.max(1, TMM.AMMO[ammoId].rangeM - 500), 0, 1);
+    return near + (far - near) * t;
+  }
+
+  // 맞은 면에 따라 손상되기 쉬운 부위 (가중치, 게임용 추정치)
+  const WEIGHTS_PEN = {
+    front: { gun: 3, fcs: 3, radio: 1, track: 1, engine: 0 },
+    side: { track: 4, engine: 1, gun: 1, fcs: 1, radio: 1 },
+    rear: { engine: 5, track: 2, radio: 1, gun: 0, fcs: 0 },
+  };
+  const WEIGHTS_EXT = {
+    front: { fcs: 2, gun: 1, radio: 2, track: 1, engine: 0 },
+    side: { track: 4, radio: 1, fcs: 0, gun: 0, engine: 0 },
+    rear: { track: 2, engine: 1, radio: 1, fcs: 0, gun: 0 },
+  };
+
+  function pickPart(target, weights, rand) {
+    const opts = TMM.PART_KEYS.filter((k) => !target.damage[k] && weights[k] > 0);
+    if (!opts.length) return null;
+    const total = opts.reduce((s, k) => s + weights[k], 0);
+    let r = rand() * total;
+    for (const k of opts) {
+      r -= weights[k];
+      if (r <= 0) return k;
+    }
+    return opts[opts.length - 1];
+  }
+
+  /**
+   * 한 발 판정. 표적 상태는 바꾸지 않고 결과만 돌려준다.
+   * 반환: { distM, pHit, hit, aspect, pPen, pen, destroyed, parts: [부위키...] }
+   */
+  function resolveShot(map, shooter, target, ammoId, rand) {
+    const res = { distM: distanceM(map, shooter, target), aspect: aspect(target, shooter), parts: [], destroyed: false, pen: false, hit: false };
+    res.pHit = hitChance(map, shooter, target, ammoId);
+    res.hit = rand() < res.pHit;
+    if (!res.hit) return res;
+
+    const ammo = TMM.AMMO[ammoId];
+    res.pPen = penChance(map, shooter, target, ammoId, res.aspect);
+    res.pen = rand() < res.pPen;
+    if (res.pen) {
+      const kill = TMM.VEHICLES[target.model].killOnPen * ammo.killMul;
+      if (rand() < kill) {
+        res.destroyed = true;
+        return res;
+      }
+      const p1 = pickPart(target, WEIGHTS_PEN[res.aspect], rand);
+      if (!p1) {
+        // 더 망가질 곳이 없으면 격파
+        res.destroyed = true;
+        return res;
+      }
+      res.parts.push(p1);
+      if (rand() < 0.4) {
+        const tmp = Object.assign({}, target, { damage: Object.assign({}, target.damage, { [p1]: true }) });
+        const p2 = pickPart(tmp, WEIGHTS_PEN[res.aspect], rand);
+        if (p2) res.parts.push(p2);
+      }
+    } else if (rand() < ammo.externalDamage) {
+      const p = pickPart(target, WEIGHTS_EXT[res.aspect], rand);
+      if (p) res.parts.push(p);
+    }
+    return res;
+  }
+
+  return { curve, distanceM, isMoving, aspect, ASPECT_NAMES, hitChance, penChance, resolveShot };
+})();

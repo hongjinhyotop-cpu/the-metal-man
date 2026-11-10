@@ -1,7 +1,9 @@
 /*
  * 마우스·키보드 입력.
  *   전차 클릭: 선택 / 지도 클릭: 선택 전차 이동 지시
+ *   적 전차 클릭: 선택 전차의 사격 목표 지정
  *   스페이스바: 일시정지·재개 / 1~4: 호차 선택 / S: 정지 / Esc: 선택 해제
+ *   Q: 탄종 전환 / X: 사격 목표 해제
  */
 TMM.Input = (function () {
   function init(game, canvas, view, actions) {
@@ -15,8 +17,11 @@ TMM.Input = (function () {
       const m = view.toMap(p.x, p.y);
       game.hover = game.map.typeAt(m.x, m.y) >= 0 ? m : null;
       const overUnit = TMM.Renderer.hitUnit(view, game.units, p.x, p.y);
+      const overEnemy = overUnit ? null : TMM.Renderer.hitUnit(view, game.enemies, p.x, p.y);
+      game.hoverEnemyId = overEnemy ? overEnemy.id : null;
       let cursor = 'default';
       if (overUnit) cursor = 'pointer';
+      else if (overEnemy) cursor = game.selectedId && !overEnemy.destroyed ? 'crosshair' : 'help';
       else if (game.selectedId && game.hover) {
         cursor = game.map.infoAt(m.x, m.y).speed ? 'crosshair' : 'not-allowed';
       }
@@ -25,6 +30,7 @@ TMM.Input = (function () {
 
     canvas.addEventListener('mouseleave', () => {
       game.hover = null;
+      game.hoverEnemyId = null;
     });
 
     canvas.addEventListener('click', (ev) => {
@@ -32,6 +38,11 @@ TMM.Input = (function () {
       const hit = TMM.Renderer.hitUnit(view, game.units, p.x, p.y);
       if (hit) {
         actions.select(hit.id);
+        return;
+      }
+      const foe = TMM.Renderer.hitUnit(view, game.enemies, p.x, p.y);
+      if (foe) {
+        if (game.selectedId) actions.target(game.selectedId, foe.id);
         return;
       }
       if (!game.selectedId) return;
@@ -59,6 +70,14 @@ TMM.Input = (function () {
       }
       if (ev.code === 'KeyS' && game.selectedId) {
         actions.stop(game.selectedId);
+        return;
+      }
+      if (ev.code === 'KeyQ' && game.selectedId) {
+        actions.cycleAmmo(game.selectedId);
+        return;
+      }
+      if (ev.code === 'KeyX' && game.selectedId) {
+        actions.clearTarget(game.selectedId);
         return;
       }
       if (ev.code === 'Escape') actions.select(null);

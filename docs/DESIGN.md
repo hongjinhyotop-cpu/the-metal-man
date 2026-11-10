@@ -26,7 +26,7 @@
 | 단계 | 내용 | 상태 |
 |---|---|---|
 | **M1** | 지도와 이동 | ✅ 완료 |
-| M2 | 사격과 피해 | 예정 |
+| **M2** | 사격과 피해 | ✅ 완료 |
 | M3 | 탐지와 식별 | 예정 |
 | M4 | 무전 지휘 | 예정 |
 | M5 | 승무원과 신뢰도 | 예정 |
@@ -44,11 +44,45 @@
 - 오른쪽 패널: 선택 전차 정보(호차, 역할, 조, 상태, 위치 지형, 격자 좌표, 고도, 속도, 방향, 목적지, 남은 거리·시간), 소대 현황, 무전 기록, 조작법, 지형 범례.
 - 부가: 시간 배속 ×1/×2/×4, S 키 정지, Esc/오른쪽 클릭 선택 해제, 커서 아래 지형 표시.
 
+### M2 사격과 피해 (완료)
+
+- **적**: 북한군 천마호 전차 1개 소대(4대, `js/units/enemy.js`). 매봉 능선 고갯길·새터읍에서 출발해 남쪽 아군 주둔지로 전진. M2 에서는 항상 보임.
+  - 지도 기호: 붉은 마름모(적대 부대 기호) + 기갑 타원 + 번호 꼬리표. 격파되면 회색 + 붉은 X.
+- **적 AI** (`js/ai/enemy-ai.js`): 전진(advance) → 아군이 2.8km 안에 들어오면 정지(engage), 처음 한 번은 횡대로 옆으로 250m씩 벌려 섬(deploy) → 정지 사격. 천마호는 기동 간 사격 안 함.
+  - 후퇴(retreat): 주포 손상, 탄약 소진, 부위 2곳 이상 손상, 또는 소대 절반 이상 격파 + 자신도 손상 → 매봉 능선 고갯길 집결지(106.5, 6)로 물러나 그 자리에서 버팀(사거리 안이면 사격).
+  - 고착(hold): 궤도가 끊기면 그 자리에서 사격만.
+- **사격** (`js/combat/gunnery.js`): 아군 전차를 선택하고 적 전차를 클릭하면 사격 목표 지정(실선). 지정 목표가 없거나 사거리 밖이면 사거리 안의 가장 가까운 적과 자동 교전(점선). X 키로 지정 해제.
+  - 표적이 바뀌면 조준 시간, 한 발 쏘면 장전 시간. 정지 중에는 차체 정면을 표적 쪽으로 돌림(정면 장갑으로 받기 위해).
+  - K1A2 는 기동 간 사격 가능(명중 ×0.8).
+- **탄종** (Q 키로 전환, 전환 시 3초 재장전): K276 날개안정분리철갑탄(전차용, 사거리 3.0km), K277 고폭다목적탄(장갑차·건물·보병용, 사거리 2.5km, 관통력은 거리 무관, 외부 장비 손상 잦음).
+  - K1A2 는 120mm 탄 32발 = K276 20발 + K277 12발 (배분은 게임용 추정치). 쓰던 탄종이 떨어지면 남은 탄종으로 자동 전환. 둘 다 없으면 사격 불가.
+- **명중·관통** (`js/combat/ballistics.js`, 수치표 `js/combat/weapons.js`):
+  - 명중 확률 = 거리별 곡선(탄종별) × 사수 이동 중 배수 × 표적 이동 중 배수 × 사격통제장치 손상 배수(×0.5). 2%~97% 로 제한.
+  - 맞은 면 = 표적 차체 방향과 '표적→사수' 방향의 각도: 50° 이내 정면, 130° 이상 후면, 그 사이 측면.
+  - 관통 확률 = 표[탄종][표적 차종][면] 의 500m 값과 최대 사거리 값을 직선 보간.
+  - 관통 시 차종별 확률(K1A2 30%, 천마호 65%)로 격파, 아니면 맞은 면에 따라 부위 1곳(40% 확률로 2곳) 손상. 관통 못 해도 탄종별 확률로 외부 장비 1곳 손상.
+  - 근거 없는 숫자는 코드에 모두 "게임용 추정치" 주석.
+- **부위별 손상** (`js/combat/damage.js`): 궤도(이동 불가) / 엔진(속도 ×0.5) / 주포(사격 불가) / 사격통제장치(명중률 ×0.5) / 무전기(지금은 기록만, M4 에서 사용) / 격파.
+  - 지도 기호 아래 작은 칸 5개(궤도·엔진·주포·사통·무전 순)로 손상 표시. 격파는 붉은 X.
+- **무전 기록**: 사격·명중·손상을 짧은 문장으로 ("2호차 적 전차 3 격파. (철갑탄, 2.1km)"). 적의 빗나간 포격은 전차마다 게임 60초에 한 번만 기록.
+- **승패** (`js/game/battle.js`, `js/ui/result.js`): 적 4대 모두 격파 → 작전 성공, 아군 4대 모두 격파 → 작전 실패. 결과 화면(격파·손실·탄약·명중률·경과 시간, 다시 하기).
+- **정보 창**: 선택 전차의 전투 상태, 잔탄(탄종별 막대), 현재 탄종, 사격 목표, 명중 예상, 사격 상태(조준·장전 초), 부위별 손상. 소대 현황에 상태 배지·잔탄, '적 현황' 칸 추가. 적 위에 커서를 올리면 거리·명중 예상 표시.
+- **교전 중 시간 감속**: 적이 아군과 3.5km 안이거나 최근 30초 안에 사격이 있으면 실제 1초 = 게임 3초 (평소 10초). 상단에 '교전 중' 표시. `CONFIG.COMBAT_TIME_SCALE`.
+- **사거리 원**: 선택 전차의 현재 탄종 사거리를 점선 원으로 표시.
+
+### M2 균형 메모 (모의 전투 400회 결과)
+
+- 아군이 주둔지에서 가만히 있어도 대개 이긴다(K1A2 가 3km 에서 먼저 쏘고, 정면 복합장갑이 115mm 를 거의 막음). 공개 평가상 그럴듯한 결과.
+- 대신 측면을 보이면 크게 당한다(측면 관통 45~60%). 후퇴한 적은 집결지에 남으므로 플레이어가 쫓아가야 승리.
+- 철갑탄 20발을 원거리에서 다 쓰면 고폭탄(2.5km)만 남아 사거리가 줄어든다 → 탄종 관리가 의미 있음.
+- M3 에서 시야가 들어오면 교전 거리가 숲·시가지·능선 때문에 짧아져 위험도가 오를 것. 그때 다시 맞출 것.
+
 ## 4. 핵심 규칙과 수치
 
 - 지도: 160 × 120 칸, **1칸 = 50m** → 8km × 6km. 좌표 단위는 "칸"(실수). x = 서→동, y = 북→남.
 - 격자 좌표: 6자리 `EEE-NNN` (100m 단위, 남서쪽 모서리 기준, 북쪽으로 갈수록 N 증가). 1km 격자선 표시.
-- 시간: 실제 1초 = 게임 10초 (`CONFIG.TIME_SCALE`), 배속 곱함. 작전 시작 D+0 05:00, 72시간.
+- 시간: 실제 1초 = 게임 10초 (`CONFIG.TIME_SCALE`), 교전 중에는 3초 (`CONFIG.COMBAT_TIME_SCALE`), 배속 곱함. 작전 시작 D+0 05:00, 72시간.
+- 거리 계산: 칸 거리 × 50m. 사거리 K276 3.0km, K277 2.5km, 천마호 115mm 3.0km(2km 밖은 명중 거의 기대 못 함).
 - 이동 속도는 전차가 **현재 서 있는 칸**의 지형으로 결정.
 - 경로 탐색: 8방향 A*. 대각선으로 통행 불가 칸 모서리를 스치는 이동 금지. 찾은 경로는 "원래 경로보다 느린 지형을 지나지 않는 지름길"만 허용해 직선화.
 - 지도는 고정 시드로 생성되므로 항상 같은 모양.
@@ -65,22 +99,34 @@ js/map/geography.js      가상 지형 정의: 하천선, 저수지, 도로, 시
 js/map/mapgen.js         칸 격자 생성, 지도 조회 함수 (TMM.MapGen → map 객체)
 js/map/pathfinding.js    A* 경로 탐색, 직선화, 소요 시간 추정 (TMM.Path)
 js/units/platoon.js      소대 편성, 조 색상 (TMM.Platoon, TMM.TEAMS)
-js/units/movement.js     이동 명령·정지·위치 갱신 (TMM.Movement)
+js/units/movement.js     이동 명령·정지·위치 갱신 (TMM.Movement). 엔진 손상 시 속도 배수 적용
+js/combat/weapons.js     탄종·차종·관통 수치표, 손상 부위 정의 (TMM.AMMO, TMM.VEHICLES, TMM.PENETRATION, TMM.PARTS) ← 균형 조정은 여기
+js/combat/ballistics.js  명중·관통·손상 판정 (TMM.Ballistics)
+js/combat/damage.js      전투 필드 초기화, 손상 적용, 상태 문구 (TMM.Damage)
+js/combat/gunnery.js     표적 선택·조준·장전·사격 (TMM.Gunnery)
+js/units/enemy.js        적 천마호 소대 편성·출발 위치·후퇴 집결지 (TMM.Enemy)
+js/ai/enemy-ai.js        적 AI: 전진·전개·정지 사격·후퇴 (TMM.EnemyAI)
+js/game/battle.js        전투 한 틱(이동→AI→사격→승패), 교전 중 판정 (TMM.Battle)
 js/game/clock.js         작전 시계 표시 형식 (TMM.Clock)
 js/game/input.js         마우스·키보드 입력 (TMM.Input)
 js/ui/panel.js           오른쪽 패널·상단 시계 갱신 (TMM.Panel)
 js/ui/radio-log.js       무전 기록 창 (TMM.RadioLog)
+js/ui/result.js          승패 결과 화면 (TMM.Result)
 js/render/terrain-layer.js  지형 바탕을 한 번 그려두는 오프스크린 캔버스
-js/render/renderer.js    매 프레임 그리기, 화면↔지도 좌표 변환, 전차 클릭 판정
-js/main.js               게임 상태 생성, 행동(actions) 정의, 주 루프
+js/render/renderer.js    매 프레임 그리기(전차·적·사격선·사거리 원·예광탄 효과), 화면↔지도 좌표 변환, 전차 클릭 판정
+js/main.js               게임 상태 생성, 행동(actions) 정의, 전투 사건→무전 문장, 주 루프
 docs/DESIGN.md           이 문서
 ```
 
 ### 주요 데이터
 
-- `TMM.game` (main.js): `{ map, units, selectedId, paused, started, speedMult, gameSeconds, hover }`
-- 전차(unit): `{ id, callsign, role, team, model, x, y, heading, path, dest, state, speedKmh }`
-  - 이후 단계에서 필드를 추가: M2 `hp/armor/ammo`, M3 `spotted`, M5 `crew` 등.
+- `TMM.game` (main.js): `{ map, units, enemies, selectedId, paused, started, speedMult, gameSeconds, hover, hoverEnemyId, fx, lastShotAt, combat, over }`
+  - `over`: 승패가 나면 `{ win, at }`. `fx`: 화면 효과(실제 시간 기준으로 사라짐).
+- 전차(unit, 아군·적 공통): `{ id, side('friend'|'enemy'), callsign, role, team, model('K1A2'|'CHONMA'), x, y, heading, path, dest, state, speedKmh }`
+  - M2 전투 필드 (`TMM.Damage.initCombat`): `ammo{탄종:발수}, ammoType, damage{track,engine,gun,fcs,radio}, destroyed, targetId(플레이어 지정), fire{targetId(실제 겨누는 표적), aim, reload}, stats{shots,hits,kills}`
+  - 적만: `num`(1~4), `ai{mode, goal, lane, deployed, repath}`
+  - 이후 단계에서 필드를 추가: M3 `spotted`, M5 `crew` 등.
+- 전투 사건(battle.js 가 돌려줌): `arrive`, `shot{shooter,target,ammoId,res,fresh}`, `ammo-switch`, `enemy-engage`, `enemy-retreat`, `over`. main.js 의 `report()` 가 무전 문장·효과로 바꾼다.
 - 지도(map): `{ cols, rows, metersPerCell, type[], elev[], speedMs[], typeAt(), infoAt(), speedMsAt(), altitudeAt(), gridRef() }`
 
 ### 확장 지침
@@ -88,10 +134,17 @@ docs/DESIGN.md           이 문서
 - 새 기능은 새 파일로 만들고 `index.html` 의 스크립트 목록에 **의존 순서대로** 추가한다.
 - 플레이어 행동은 `main.js` 의 `actions` 를 거치게 해, 무전 기록·향후 무전 지휘(M4)와 연결되게 한다.
 - 지형 수치는 `terrain-types.js`, 지형 모양은 `geography.js` 만 고치면 된다.
+- 전투 수치(명중·관통·장전·탄약)는 `weapons.js`, 적 행동 기준(정지 거리·후퇴 조건)은 `enemy-ai.js` 위쪽 상수만 고치면 된다.
+- 전투 규칙은 DOM 없이 돌아가므로(`battle.js` 이하) Node 로 모의 전투를 수백 번 돌려 균형을 볼 수 있다: index.html 의 스크립트 중 render·input·ui·main 을 뺀 나머지를 `vm` 으로 읽고 `TMM.Battle.step(game, 0.5)` 반복.
 
-## 6. 다음 단계 메모 (M2 사격과 피해)
+## 6. 다음 단계 메모 (M3 탐지와 식별)
 
-- 적 전차(가상 적 기갑) 배치, 사거리·명중률·관통/피해 모델.
-- 지형 엄폐(숲·시가지·능선) 효과, 고도 차이 고려.
-- 전차 상태(정상/기동 불능/화력 불능/파괴)와 패널 표시.
+- **시야선(LOS)**: 고도(`map.elev`)와 숲·시가지 칸으로 가림 판정. `TMM.Gunnery.chooseTarget` 과 `EnemyAI` 의 '사거리 안' 검사에 "보이는가"를 추가하면 된다. 지금은 적이 항상 보임(`game.enemies` 를 그대로 그림).
+- **탐지 단계**: 미탐지 → 탐지(무언가 있음, 위치 대략) → 식별(전차/천마호). 전차마다 `spotted`/`identified` 와 마지막으로 본 위치·시각을 저장하고, 렌더러는 탐지된 적만(식별 전에는 '미상' 기호) 그리게 한다.
+- **탐지 거리 요인**: 표적이 이동 중·사격 직후(포구 섬광)면 잘 보이고, 숲·시가지 안이면 잘 안 보임. K1A2 열상 조준경(전차장 조준경 포함)이 천마호보다 탐지 거리 김.
+- **지형 엄폐 명중 배수**: 숲·시가지 안 표적 명중률 감소, 능선(차체 은폐)은 차체 피탄 감소. `Ballistics.hitChance` 에 배수 하나 추가.
+- **균형 다시 맞추기**: 시야가 생기면 교전 거리가 짧아져 천마호의 위협이 커진다. M2 의 장거리 수치(K276 3km 22%, 적 정지 거리 2.8km)는 그때 다시 볼 것.
+- **적 AI**: 엄폐물에서 엄폐물로 이동(숲 가장자리·시가지)하게 하면 시야 모델의 효과가 살아난다. 지금 AI 는 도로를 따라 곧장 온다.
+- **무전기 손상**(M4): 지금은 기록만. M4 에서 손상된 전차는 명령 수신 지연·실패.
+- **차체 방향 지시**: 지금은 정지 중 자동으로 표적을 향함. M4 무전 지휘에서 '정면 ○○ 방향' 지시를 추가할 만함.
 - 지도 확대/이동(휠·드래그)이 필요해질 수 있음 → `renderer.js` 의 view 에 추가.

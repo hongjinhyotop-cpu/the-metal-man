@@ -1,8 +1,10 @@
 /*
  * 전차 이동: 이동 명령 처리와 매 프레임 위치 갱신.
- * 속도는 전차가 지금 서 있는 칸의 지형으로 정해진다.
+ * 속도는 전차가 지금 서 있는 칸의 지형으로 정해진다. 엔진이 손상되면 그 속도에 배수를 곱한다.
  */
 TMM.Movement = (function () {
+  const mul = (unit) => (TMM.Damage ? TMM.Damage.speedMul(unit) : 1);
+
   /**
    * 이동 명령. 반환: { ok, reason?, eta?, meters? }
    */
@@ -15,6 +17,7 @@ TMM.Movement = (function () {
     if (!pts) return { ok: false, reason: '갈 수 있는 경로가 없습니다' };
 
     const est = TMM.Path.estimate(map, pts);
+    est.sec /= mul(unit);
     unit.path = pts.slice(1);
     unit.dest = { x: tx, y: ty };
     unit.state = 'moving';
@@ -46,7 +49,7 @@ TMM.Movement = (function () {
         continue;
       }
       // 통행 불가 칸 모서리를 스칠 때도 멈추지 않도록 최소 속도 보정
-      const ms = map.speedMsAt(unit.x, unit.y) || map.maxSpeedMs * 0.15;
+      const ms = (map.speedMsAt(unit.x, unit.y) || map.maxSpeedMs * 0.15) * mul(unit);
       unit.speedKmh = ms * 3.6;
       unit.heading = Math.atan2(dy, dx);
       const cellsPerSec = ms / map.metersPerCell;
@@ -72,7 +75,9 @@ TMM.Movement = (function () {
   // 남은 경로의 거리(m)와 시간(게임 초)
   function remaining(map, unit) {
     if (unit.state !== 'moving') return null;
-    return TMM.Path.estimate(map, [{ x: unit.x, y: unit.y }].concat(unit.path));
+    const est = TMM.Path.estimate(map, [{ x: unit.x, y: unit.y }].concat(unit.path));
+    est.sec /= mul(unit);
+    return est;
   }
 
   return { order, stop, update, remaining };
