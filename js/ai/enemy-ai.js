@@ -54,6 +54,7 @@ TMM.EnemyAI = (function () {
 
   // 싸울 수 있는 전차: 살아 있고, 주포·탄약이 있고, 움직일 수 있고, 손상 부위 1곳 이하
   function effective(e) {
+    if (e.ai.pending) return true; // M7a: 아직 오는 중인 제대가 있으면 소대(전체)는 무너지지 않았다
     return !e.destroyed && !e.exited && D().canFire(e) && D().canMove(e) && D().damagedParts(e).length <= 1 && e.ai.mode !== 'retreat';
   }
 
@@ -110,16 +111,27 @@ TMM.EnemyAI = (function () {
     checkBreak(game, events);
     checkGo(game, events);
     const now = game.gameSeconds;
-    const EXIT = TMM.Enemy.EXIT;
+    // M7a: 작전마다 후퇴 집결지·퇴각 출구가 다르다 (game.enemyRally, game.enemyExits). 퇴각은 가장 가까운 출구로.
+    const RALLY = game.enemyRally || TMM.Enemy.RALLY;
+    const EXITS = game.enemyExits || [TMM.Enemy.EXIT];
 
     for (const e of game.enemies) {
+      // M7a: 늦게 오는 적 — 출발 시각이 되면 지도에 나타난다
+      if (e.ai.pending) {
+        if (now - game.startSeconds < e.ai.delay) continue;
+        e.ai.pending = false;
+        e.exited = false;
+        events.push({ type: 'enemy-arrive', unit: e });
+      }
       if (e.destroyed || e.exited) continue;
       const ai = e.ai;
       ai.repath = Math.max(0, ai.repath - gdt);
       ai.wait = Math.max(0, ai.wait - gdt);
 
       if (ai.mode === 'withdraw') {
-        if (e.y < 1.6) {
+        if (!ai.exit) ai.exit = EXITS.reduce((b, x) => (Math.hypot(x.x - e.x, x.y - e.y) < Math.hypot(b.x - e.x, b.y - e.y) ? x : b));
+        const EXIT = ai.exit;
+        if (Math.hypot(e.x - EXIT.x, e.y - EXIT.y) < 1.8) {
           e.exited = true;
           TMM.Movement.stop(e);
           events.push({ type: 'enemy-exit', unit: e });
@@ -129,6 +141,7 @@ TMM.EnemyAI = (function () {
         }
         continue;
       }
+
 
       if (!D().canMove(e)) {
         if (ai.mode !== 'hold') {
@@ -140,7 +153,7 @@ TMM.EnemyAI = (function () {
 
       if (ai.mode !== 'retreat' && shouldRetreat(game, e)) {
         ai.mode = 'retreat';
-        const res = TMM.Movement.order(game.map, e, TMM.Enemy.RALLY.x, TMM.Enemy.RALLY.y);
+        const res = TMM.Movement.order(game.map, e, RALLY.x, RALLY.y);
         if (res.ok) events.push({ type: 'enemy-retreat', unit: e });
         continue;
       }
@@ -153,13 +166,22 @@ TMM.EnemyAI = (function () {
       }
 
       const th = threats(game, e);
-      const atPos = ai.wp >= ai.route.length - 2 && Math.hypot(e.x - ai.route[ai.route.length - 2].x, e.y - ai.route[ai.route.length - 2].y) < 2.5;
+      const atPos = ai.route.length >= 2 && ai.wp >= ai.route.length - 2 && Math.hypot(e.x - ai.route[ai.route.length - 2].x, e.y - ai.route[ai.route.length - 2].y) < 2.5;
       if (atPos) ai.atPos = true;
-      const radius = ai.atPos ? P.ENGAGE_M : game.enemyGo ? P.ASSAULT_ENGAGE_M : P.APPROACH_ENGAGE_M;
+      const radius = ai.engageM || (ai.atPos || ai.static ? P.ENGAGE_M : game.enemyGo ? P.ASSAULT_ENGAGE_M : P.APPROACH_ENGAGE_M);
       // 멈춰 싸우는 것은 '자기 눈으로' 보이는 위협이 있을 때만 (소대가 공유한 접촉만으로는 멈추지 않고 다가간다)
       const close = th.some((t) => t.d <= radius && TMM.Intel.sees(game, e, t.c.unit));
       if (close) ai.lastThreatAt = now;
       const armed = D().canFire(e);
+
+      // M7a: 진지 방어 — 움직이지 않고, 보이는 아군과 싸운다
+      if (ai.static) {
+        if (armed && close && ai.mode !== 'engage') {
+          ai.mode = 'engage';
+          events.push({ type: 'enemy-engage', unit: e });
+        }
+        continue;
+      }
 
       if (armed && close) {
         if (ai.mode !== 'engage') {
@@ -200,7 +222,7 @@ TMM.EnemyAI = (function () {
     }
   }
 
-  const MODE_NAMES = { advance: '전진 중', deploy: '전개 중', engage: '정지 사격', retreat: '후퇴 중', withdraw: '퇴각 중', hold: '기동 불능' };
+  const MODE_NAMES = { defend: '진지 방어', advance: '전진 중', deploy: '전개 중', engage: '정지 사격', retreat: '후퇴 중', withdraw: '퇴각 중', hold: '기동 불능' };
 
   return { update, MODE_NAMES, ENGAGE_M: P.ENGAGE_M, P };
 })();

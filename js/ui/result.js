@@ -4,10 +4,15 @@
  */
 TMM.Result = (function () {
   let el = null;
+  let next = 'training';
 
+  // 한 페이지에서 전투는 한 번만 돈다 → 다음 화면을 정해 두고 페이지를 다시 연다 (main.js showEntry)
   function init() {
     el = document.getElementById('result');
-    el.querySelector('[data-restart]').addEventListener('click', () => window.location.reload());
+    el.querySelector('[data-restart]').addEventListener('click', () => {
+      try { sessionStorage.setItem('tmm.next', next); } catch (e) { /* 저장소 없음 → 처음 화면 */ }
+      window.location.reload();
+    });
   }
 
   // M6: 조준 화면에서 직접 쏜 결과와 조준 화면에 있던 시간
@@ -20,12 +25,15 @@ TMM.Result = (function () {
     return m.shots + '발 · 명중 ' + m.hits + ' · 격파 ' + m.kills + ' · 조준 화면 ' + t + ' (실제 시간)';
   }
 
-  function show(game) {
+  // opts.campaign: M7a 캠페인 상태 (이미 결과가 이월·저장됨)
+  function show(game, opts) {
     const win = game.over.win;
+    const camp = opts && opts.campaign;
+    next = camp ? 'campaign' : 'training';
     const lost = game.units.filter((u) => u.destroyed).length;
     const kills = game.enemies.filter((e) => e.destroyed && !e.abandoned).length;
     const aband = game.enemies.filter((e) => e.abandoned).length;
-    const gone = game.enemies.filter((e) => e.exited).length;
+    const gone = game.enemies.filter((e) => e.exited && !(e.ai && e.ai.pending)).length;
     const allyLost = game.allies.filter((a) => a.destroyed).length;
     let shots = 0, hits = 0;
     for (const u of game.units) { shots += u.stats.shots; hits += u.stats.hits; }
@@ -33,8 +41,12 @@ TMM.Result = (function () {
 
     el.classList.toggle('win', win);
     el.classList.toggle('lose', !win);
-    el.querySelector('.r-title').textContent = win ? '작전 성공' : '작전 실패';
-    el.querySelector('.r-sub').textContent = !win
+    const res = game.over.result;
+    el.querySelector('.r-title').textContent = camp ? (res === 'success' ? '작전 성공' : res === 'collapse' ? '소대 붕괴' : '작전 실패') : win ? '작전 성공' : '작전 실패';
+    el.querySelector('[data-restart]').textContent = !camp ? '다시 하기' : camp.phase === 'ending' ? '엔딩 보기 ▸' : '재정비 ▸';
+    el.querySelector('.r-sub').textContent = camp
+      ? '작전 ' + game.op.no + ' · ' + game.op.name + ' — ' + game.over.reason + (camp.phase === 'ending' ? '' : ' (자동 저장됨)')
+      : !win
       ? '소대 전차 ' + lost + '대가 격파되어 소대가 전투력을 잃었습니다.'
       : gone || aband
         ? '적 천마호 소대가 전투력을 잃고 북쪽으로 퇴각했습니다.'
@@ -47,7 +59,7 @@ TMM.Result = (function () {
       ['1호차 직접 조준', manualText(game)],
       ['오인사격', game.ffCount ? game.ffCount + ' 회 — 아군 피해 주의' : '없음'],
       ['비지휘 아군 손실', allyLost ? allyLost + ' (' + game.allies.filter((a) => a.destroyed).map((a) => a.callsign).join(', ') + ')' : '없음'],
-      ['작전 시간', TMM.LIGHT[game.light].name],
+      ['작전 시간', camp ? game.op.when : TMM.LIGHT[game.light].name],
       ['작전 경과', TMM.Clock.duration(elapsed) + ' (' + TMM.Clock.format(game.over.at) + ')'],
     ];
     const dl = el.querySelector('.r-stats');

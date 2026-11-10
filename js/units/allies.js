@@ -24,7 +24,9 @@ TMM.Allies = (function () {
     },
   ];
 
-  function create() {
+  // none: true 면 비지휘 아군 없음 (M7a: 첫 접적 말고는 없다)
+  function create(none) {
+    if (none) return [];
     return ROSTER.map((d) => {
       const u = TMM.Damage.initCombat({
         id: d.id,

@@ -60,8 +60,9 @@ TMM.Ballistics = (function () {
     if (mods && mods.autoMul) p *= mods.autoMul; // M6: 지도 화면에 있는 동안 1호차 포수 혼자
     if (mods) {
       const V = TMM.VISION;
-      if (mods.hullDown) p *= V.HULL_DOWN_HIT;
-      if (mods.obs) p *= 1 - V.OBS_HIT * Math.min(1, mods.obs);
+      // M7a: 고폭탄은 가림·차체 엄폐의 영향을 덜 받는다 (weapons.js 의 obsPenaltyMul·hullDownHit)
+      if (mods.hullDown) p *= ammo.hullDownHit || V.HULL_DOWN_HIT;
+      if (mods.obs) p *= 1 - V.OBS_HIT * (ammo.obsPenaltyMul != null ? ammo.obsPenaltyMul : 1) * Math.min(1, mods.obs);
       const sens = TMM.SENSORS[shooter.model];
       if (sens && mods.light) p *= sens[mods.light].hitMul;
     }

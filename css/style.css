@@ -706,3 +706,150 @@ button {
 }
 .cmd-card.scoped { border-left-color: var(--warn); }
 .cmd-card.scoped .cmd-hint { color: var(--warn); }
+
+/* ---------- M7a 캠페인 화면 ---------- */
+.camp {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  overflow-y: auto;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.015) 0 1px, transparent 1px 40px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.015) 0 1px, transparent 1px 40px),
+    rgba(10, 12, 7, 0.97);
+  padding: 28px 16px;
+}
+.camp[hidden] { display: none !important; }
+.c-box {
+  width: 640px;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 20px 24px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--accent);
+}
+.camp.orders .c-box, .camp.refit .c-box { width: 900px; }
+.camp.title { display: grid; place-items: center; }
+.c-logo { font-family: var(--mono); font-weight: 700; font-size: 30px; letter-spacing: 0.32em; color: var(--accent); margin: 6px 0 10px; }
+.c-menu { display: grid; gap: 8px; margin: 16px 0 12px; }
+.c-big {
+  display: flex; flex-direction: column; gap: 3px; text-align: left;
+  padding: 11px 14px; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--accent);
+  color: var(--text-dim); cursor: pointer; font: inherit;
+}
+.c-big b { font-family: var(--mono); font-size: 16px; letter-spacing: 0.2em; color: var(--accent); }
+.c-big span { font-size: 12.5px; }
+.c-big.dim { border-left-color: var(--line); }
+.c-big.dim b { color: var(--text); }
+.c-big:hover, .c-big:focus-visible { background: var(--panel-2); border-color: var(--accent); outline: none; }
+.c-note { font-size: 11.5px; color: var(--text-faint); margin: 0; }
+.c-btn {
+  background: var(--panel); border: 1px solid var(--line); color: var(--text-dim);
+  padding: 5px 12px; font-family: var(--mono); font-size: 12px; cursor: pointer;
+}
+.c-btn:hover, .c-btn:focus-visible { border-color: var(--accent); color: var(--text); outline: none; }
+.c-nav { display: flex; align-items: center; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--line-soft); }
+.c-gap { flex: 1; font-size: 12px; color: var(--text-faint); }
+.s-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.mono { font-family: var(--mono); }
+.sub { color: var(--text-faint); font-weight: 400; font-size: 12px; }
+.ok { color: var(--ok); }
+.bad { color: #ff8a70; }
+
+/* 프롤로그 */
+.c-scene { font-size: 13px; color: var(--text-dim); margin: 4px 0 12px; }
+.c-scene .mono { color: var(--accent); font-weight: 700; margin-right: 6px; }
+.c-lines { display: grid; gap: 7px; }
+.c-say { margin: 0; display: grid; grid-template-columns: 112px 1fr; gap: 10px; font-size: 14px; }
+.c-say b { color: #c9b98a; font-weight: 600; font-size: 12.5px; text-align: right; padding-top: 1px; }
+.c-say.me b { color: var(--accent); }
+.c-say.radio b { color: var(--ally); }
+.c-say.radio span { font-family: var(--mono); font-size: 13px; color: var(--ally); }
+.c-say.note { display: block; color: var(--text-faint); font-style: italic; font-size: 13px; padding-left: 122px; }
+.c-lesson { margin-top: 14px; padding: 10px 14px; border: 1px solid var(--line); border-left: 4px solid var(--ally); background: var(--panel); }
+.c-lesson-t { font-family: var(--mono); font-weight: 700; color: var(--ally); letter-spacing: 0.1em; margin-bottom: 4px; }
+.c-lesson ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; color: var(--text-dim); }
+.c-lesson b { color: var(--text); }
+
+/* 작전 명령 */
+.c-order-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.c-op { font-family: var(--mono); font-weight: 700; font-size: 22px; letter-spacing: 0.12em; color: var(--accent); margin-top: 2px; }
+.c-op span { color: var(--text-faint); font-size: 14px; }
+.c-when { color: var(--text-dim); font-size: 12.5px; }
+.c-grid { display: grid; grid-template-columns: 1fr 340px; gap: 16px; margin-top: 12px; }
+.c-brief { display: grid; grid-template-columns: 72px 1fr; gap: 5px 12px; margin: 0; font-size: 13px; }
+.c-brief dt { color: var(--text-faint); font-family: var(--mono); font-size: 11.5px; padding-top: 2px; }
+.c-brief dt.ok { color: var(--ok); }
+.c-brief dt.bad { color: #ff8a70; }
+.c-brief dd { margin: 0; color: var(--text-dim); }
+.c-brief dd b { color: var(--text); }
+.c-press { margin: 10px 0 0; padding: 6px 10px; border: 1px solid var(--warn); color: var(--warn); font-size: 12.5px; }
+.c-tip { margin: 10px 0 0; padding: 6px 10px; background: var(--panel); border-left: 3px solid var(--team-2); font-size: 12.5px; color: var(--text-dim); }
+.c-tip b { color: var(--team-2); margin-right: 6px; }
+.c-map { display: block; width: 100%; border: 1px solid var(--line); background: #1a2013; }
+.c-legend { margin: 4px 0 0; font-size: 11px; color: var(--text-faint); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.c-legend i { display: inline-block; width: 9px; height: 9px; margin-right: 3px; vertical-align: -1px; }
+.lg-u { background: var(--team-1); }
+.lg-e { background: var(--enemy); transform: rotate(45deg) scale(0.8); }
+.lg-m { border: 1.5px dashed #9fd0ff; }
+.c-sec { font-family: var(--mono); font-weight: 700; font-size: 12.5px; letter-spacing: 0.14em; color: var(--text); margin: 16px 0 6px; padding-top: 10px; border-top: 1px dashed var(--line-soft); }
+.c-sec .sub { font-family: var(--font); letter-spacing: 0; }
+.c-ammo-help { font-size: 12px; color: var(--text-faint); margin: 0 0 8px; }
+.c-tanks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.c-tank { padding: 7px 10px; background: var(--panel); border: 1px solid var(--line-soft); border-left: 4px solid var(--team-1); font-size: 12.5px; color: var(--text-dim); }
+.c-tank.team-2 { border-left-color: var(--team-2); }
+.c-tank.dead { border-left-color: var(--dead); opacity: 0.75; }
+.c-tank-h b { color: var(--text); font-family: var(--mono); margin-right: 4px; }
+.c-ammo { display: grid; grid-template-columns: auto 1fr auto auto; gap: 8px; align-items: center; margin-top: 6px; font-family: var(--mono); font-size: 12px; }
+.c-ammo b { color: var(--text); display: inline-block; min-width: 2ch; text-align: right; }
+.c-ap { color: var(--accent); }
+.c-he { color: #e6a05a; }
+.c-tot { color: var(--text-faint); }
+.c-ammo input[type="range"] { width: 100%; accent-color: var(--accent); }
+.c-presets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+
+/* 재정비 */
+.c-res, .c-end { font-family: var(--mono); font-weight: 700; font-size: 20px; letter-spacing: 0.14em; margin: 4px 0 8px; }
+.c-res.success, .c-end.complete { color: var(--ok); }
+.c-res.fail, .c-end.partial { color: var(--accent); }
+.c-res.collapse, .c-end.collapse { color: #ff6a50; }
+.c-end { font-size: 28px; letter-spacing: 0.3em; }
+.c-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 12.5px; }
+.c-list li { color: var(--text-dim); padding: 2px 0 2px 8px; border-left: 3px solid var(--team-1); }
+.c-list li.team-2 { border-left-color: var(--team-2); }
+.c-list li.dead { border-left-color: var(--dead); color: var(--text-faint); }
+.c-list li.hurt { color: #ff9a80; }
+.c-list li b { color: var(--text); }
+.c-list .c-crew-head { margin-top: 6px; border-left-width: 6px; color: var(--text); font-weight: 600; }
+.c-role { display: inline-block; min-width: 3.5em; color: var(--text-faint); font-size: 11.5px; }
+.c-hist { border-collapse: collapse; width: 100%; font-size: 13px; margin: 6px 0 10px; }
+.c-hist th { text-align: left; font-weight: 400; color: var(--text-faint); font-size: 11.5px; border-bottom: 1px solid var(--line); padding: 3px 6px; }
+.c-hist td { padding: 4px 6px; border-bottom: 1px dashed var(--line-soft); color: var(--text-dim); }
+.c-hist tr.success td:nth-child(3) { color: var(--ok); }
+.c-hist tr.fail td:nth-child(3) { color: var(--accent); }
+.c-hist tr.collapse td:nth-child(3) { color: #ff6a50; }
+
+/* 전투 중 작전 목표 띠 */
+.op-hud {
+  position: absolute; left: 10px; bottom: 72px; z-index: 1;
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 6px 10px; max-width: min(420px, calc(100% - 80px));
+  background: rgba(14, 18, 10, 0.86); border: 1px solid var(--line); border-left: 3px solid #9fd0ff;
+  font-size: 12px; color: var(--text-dim); pointer-events: none;
+}
+.op-hud[hidden] { display: none; }
+.op-hud b { font-family: var(--mono); color: #9fd0ff; letter-spacing: 0.06em; }
+.op-hud .mono { color: var(--text); }
+.map-wrap.scoped .op-hud { display: none; }
+
+@media (max-width: 900px) {
+  .c-grid { grid-template-columns: 1fr; }
+  .c-tanks { grid-template-columns: 1fr; }
+  .c-say { grid-template-columns: 1fr; gap: 0; }
+  .c-say b { text-align: left; }
+  .c-say.note { padding-left: 0; }
+  .camp { padding: 12px 8px; }
+  .c-box { padding: 16px; }
+  .op-hud { font-size: 11px; max-width: calc(100% - 60px); }
+}

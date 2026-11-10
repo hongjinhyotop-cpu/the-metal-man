@@ -9,16 +9,23 @@
  *   패배 — 아군 소대 전차가 CONFIG.PLATOON_LOSS_FAIL(3)대 이상 격파됨 → 소대 전투력 상실 (M4)
  */
 TMM.Battle = (function () {
+  // opts.op (M7a 캠페인 작전, TMM.Campaign.battleSpec 이 만듦): { no, name, light, startSeconds, units, enemies, allies, rally, exits, objective, calls, marks }
+  //   없으면 훈련 모드 (지금까지의 단일 전투)
   function create(opts) {
-    const light = (opts && opts.light) || 'day';
+    const op = (opts && opts.op) || null;
+    const light = (op && op.light) || (opts && opts.light) || 'day';
+    const start = op && op.startSeconds != null ? op.startSeconds : TMM.LIGHT[light].start;
     const game = {
       map: (opts && opts.map) || TMM.MapGen.generate(),
-      units: TMM.Platoon.create(),
-      enemies: TMM.Enemy.create(),
-      allies: TMM.Allies.create(),
+      units: TMM.Platoon.create(op ? op.units : null),
+      enemies: TMM.Enemy.create(op ? op.enemies : null),
+      allies: TMM.Allies.create(op ? !op.allies : false),
+      op,
+      enemyRally: op && op.rally ? op.rally : null,
+      enemyExits: op && op.exits ? op.exits : null,
       light,
-      startSeconds: TMM.LIGHT[light].start,
-      gameSeconds: TMM.LIGHT[light].start,
+      startSeconds: start,
+      gameSeconds: start,
       lastShotAt: null,
       combat: false,
       over: null,
@@ -54,6 +61,7 @@ TMM.Battle = (function () {
     TMM.Orders.onEvents(game, events);
     TMM.Crew.onEvents(game, events);
     TMM.Radio.onEvents(game, events);
+    if (game.op) TMM.Objective.update(game, events); // M7a: 정해진 시각의 중대 무전
     for (const ev of events) {
       if (ev.type === 'shot') {
         game.lastShotAt = game.gameSeconds;
@@ -62,8 +70,12 @@ TMM.Battle = (function () {
     }
 
     if (!game.over) {
-      if (game.enemies.every((e) => e.destroyed || e.exited)) game.over = { win: true, at: game.gameSeconds };
-      else if (game.units.filter((u) => u.destroyed).length >= TMM.CONFIG.PLATOON_LOSS_FAIL) game.over = { win: false, at: game.gameSeconds };
+      if (game.op) {
+        // M7a 캠페인: 작전마다 다른 승패 조건 (objectives.js)
+        const r = TMM.Objective.check(game);
+        if (r) game.over = Object.assign({ at: game.gameSeconds }, r);
+      } else if (game.enemies.every((e) => e.destroyed || e.exited)) game.over = { win: true, at: game.gameSeconds, result: 'success' };
+      else if (game.units.filter((u) => u.destroyed).length >= TMM.CONFIG.PLATOON_LOSS_FAIL) game.over = { win: false, at: game.gameSeconds, result: 'collapse' };
       if (game.over) {
         for (const u of game.units.concat(game.enemies)) u.fire.targetId = null;
         TMM.Crew.finish(game, events);

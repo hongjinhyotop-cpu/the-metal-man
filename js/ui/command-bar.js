@@ -112,10 +112,12 @@ TMM.CommandBar = (function () {
         cache.set('to' + t.to, key);
         b.classList.toggle('on', on);
         b.setAttribute('aria-pressed', on ? 'true' : 'false');
-        b.classList.toggle('dead', !!(u && u.destroyed));
+        const absent = !u && /^[1-4]$/.test(t.to); // M7a: 앞 작전에서 격파되어 이번 작전에 없는 전차
+        b.classList.toggle('dead', !!(u && u.destroyed) || absent);
         const d = b.querySelector('.dot');
         d.className = 'dot ' + dot;
         if (u) b.querySelector('.t-s').textContent = u.destroyed ? '격파' : u === ctrl ? '직접' : dot === 'dead' ? '두절' : '무전';
+        else if (absent) b.querySelector('.t-s').textContent = '불참';
       }
     }
     for (const o of ORDERS) {

@@ -593,6 +593,55 @@ TMM.Renderer = (function () {
     ctx.restore();
   }
 
+  // M7a 작전 지도 표시: 사수 구역·목표(구역), 저지선·하천선(선), 다리(지점). 작전 명령 화면의 요약 지도도 같이 쓴다.
+  //   v: { ox, oy, scale } · marks: game.op.marks · alpha: 진하기
+  function drawMarks(ctx, v, marks, alpha) {
+    if (!marks || !marks.length) return;
+    const P = (x, y) => ({ x: v.ox + x * v.scale, y: v.oy + y * v.scale });
+    const small = v.scale < 4;
+    ctx.save();
+    ctx.globalAlpha = alpha == null ? 0.85 : alpha;
+    ctx.font = '700 ' + (small ? 9 : 11) + 'px ' + FONT_MONO;
+    ctx.textBaseline = 'bottom';
+    ctx.textAlign = 'left';
+    const label = (text, x, y, col) => {
+      const w = ctx.measureText(text).width;
+      ctx.fillStyle = 'rgba(10, 14, 8, 0.75)';
+      ctx.fillRect(x - 2, y - (small ? 11 : 14), w + 4, small ? 11 : 14);
+      ctx.fillStyle = col;
+      ctx.fillText(text, x, y);
+    };
+    for (const m of marks) {
+      const col = m.enemy ? '#ff8a70' : '#9fd0ff';
+      ctx.strokeStyle = col;
+      ctx.lineWidth = small ? 1.5 : 2;
+      ctx.setLineDash(small ? [4, 3] : [8, 5]);
+      if (m.type === 'zone') {
+        const a = P(m.x0, m.y0), b = P(m.x1, m.y1);
+        ctx.fillStyle = m.enemy ? 'rgba(255, 110, 80, 0.07)' : 'rgba(150, 200, 255, 0.06)';
+        ctx.fillRect(a.x, a.y, b.x - a.x, b.y - a.y);
+        ctx.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y);
+        ctx.setLineDash([]);
+        if (m.label) label(m.label, a.x + 3, a.y - 2, col);
+      } else if (m.type === 'line') {
+        ctx.beginPath();
+        m.pts.forEach(([x, y], i) => { const p = P(x, y); if (i) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y); });
+        ctx.stroke();
+        ctx.setLineDash([]);
+        const p0 = P(m.pts[0][0], m.pts[0][1]);
+        if (m.label) label(m.label, p0.x + 3, p0.y - 3, col);
+      } else if (m.type === 'point') {
+        const p = P(m.x, m.y);
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, small ? 6 : 12, 0, Math.PI * 2);
+        ctx.stroke();
+        if (m.label) label(m.label, p.x + (small ? 8 : 15), p.y - (small ? 4 : 8), col);
+      }
+    }
+    ctx.restore();
+  }
+
   function drawFrame(ctx, view, game, terrain, time) {
     const { map } = game;
     const dpr = view.dpr;
@@ -643,6 +692,8 @@ TMM.Renderer = (function () {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
     ctx.fillText('1 km', sx + px1km + 6, sy + 3);
+
+    if (game.op) drawMarks(ctx, view, game.op.marks, 0.8); // M7a 작전 목표·저지선
 
     const sel = game.units.find((u) => u.id === game.selectedId);
     if (sel && game.showSight && !sel.destroyed) drawSight(ctx, view, game, sel);
@@ -713,5 +764,5 @@ TMM.Renderer = (function () {
     return best;
   }
 
-  return { createView, fit, drawFrame, hitUnit, contactMarks };
+  return { createView, fit, drawFrame, hitUnit, contactMarks, drawMarks };
 })();

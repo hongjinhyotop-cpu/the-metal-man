@@ -287,7 +287,7 @@ TMM.Panel = (function () {
 
     const kills = game.enemies.filter((e) => e.destroyed && !e.abandoned).length;
     const aband = game.enemies.filter((e) => e.abandoned).length;
-    const gone = game.enemies.filter((e) => e.exited).length;
+    const gone = game.enemies.filter((e) => e.exited && !e.ai.pending).length; // M7a: 아직 안 온 제대는 빼고
     const seen = game.enemies.filter((e) => { const c = TMM.Intel.contact(game, 'friend', e.id); return c && c.known && c.identified; }).length;
     let sum = '적 전차 식별 ' + seen + ' / ' + game.enemies.length + ' · 격파 ' + kills;
     if (aband) sum += ' · 유기 ' + aband;

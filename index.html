@@ -44,9 +44,10 @@
       <div id="cursor-readout" class="cursor-readout">커서를 지도 위에 올리면 지형 정보가 표시됩니다</div>
       <div id="sight-hint" class="sight-hint">시야 표시 꺼짐 (V)</div>
       <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+      <div id="op-hud" class="op-hud" hidden></div>
       <div id="start" class="start" hidden>
         <div class="s-box" role="dialog" aria-labelledby="start-title">
-          <div class="s-kicker">작전 명령 · K1A2 전차 소대</div>
+          <div class="s-kicker">훈련 모드 · 단일 전투 (캠페인과 상관없음)</div>
           <div class="s-title" id="start-title">무전 지휘</div>
           <p class="s-brief">
             적 천마호 전차 1개 소대(4대)가 북쪽 매봉 능선·새터읍에서 남하 중입니다. 소대(호출부호 <b>강철</b>)는 주둔지를 지키며 적을 저지합니다.
@@ -72,7 +73,10 @@
               <b>야간</b><span>22:00 개시 · K1A2 열상장비로 식별이 더 빠름 · 천마호는 탐지·식별이 훨씬 느림</span>
             </button>
           </div>
-          <button type="button" class="r-btn s-go" data-go>작전 지도 열기</button>
+          <div class="s-row">
+            <button type="button" class="c-btn dim" data-back>◂ 처음 화면</button>
+            <button type="button" class="r-btn s-go" data-go>작전 지도 열기</button>
+          </div>
         </div>
       </div>
       <div id="result" class="result" hidden>
@@ -160,6 +164,9 @@
     </aside>
   </main>
 
+  <!-- M7a 캠페인 화면 (처음 화면·프롤로그·작전 명령·재정비·엔딩) -->
+  <div id="camp" class="camp" hidden></div>
+
   <!-- 순서 중요: core → map → units → game/ui → render → main -->
   <script src="js/core/config.js"></script>
   <script src="js/core/noise.js"></script>
@@ -186,12 +193,16 @@
   <script src="js/crew/crew-data.js"></script>
   <script src="js/crew/crew.js"></script>
   <script src="js/ai/enemy-ai.js"></script>
+  <script src="js/game/objectives.js"></script>
   <script src="js/game/battle.js"></script>
   <script src="js/game/clock.js"></script>
+  <script src="js/campaign/campaign-data.js"></script>
+  <script src="js/campaign/campaign.js"></script>
   <script src="js/ui/radio-log.js"></script>
   <script src="js/ui/panel.js"></script>
   <script src="js/ui/result.js"></script>
   <script src="js/ui/command-bar.js"></script>
+  <script src="js/ui/campaign-ui.js"></script>
   <script src="js/render/terrain-layer.js"></script>
   <script src="js/render/renderer.js"></script>
   <script src="js/render/scope-view.js"></script>

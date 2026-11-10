@@ -48,6 +48,26 @@ TMM.Gunnery = (function () {
     return true;
   }
 
+  // M7a: 새 표적을 잡을 때 승무원이 탄종을 고른다 — 가려진 표적·차체 엄폐 표적이 2km 안이면 고폭탄, 아니면 철갑탄.
+  // 소대장이 Q 로 직접 바꾼 1호차는 2분 동안 그대로 둔다(ammoPinnedUntil). 탄을 바꿔 넣는 시간은 새 표적 조준 시간에 포함.
+  const choosesAmmo = (game, unit) => unit.side === 'friend' && !unit.ally && unit.model === 'K1A2' && !(unit.ammoPinnedUntil != null && game.gameSeconds < unit.ammoPinnedUntil);
+  // 표적을 고를 때 쓰는 사거리: 탄종을 스스로 고르는 전차는 남은 탄 중 가장 긴 사거리
+  function reach(game, unit) {
+    if (!choosesAmmo(game, unit)) return TMM.AMMO[unit.ammoType].rangeM;
+    let r = 0;
+    for (const k of TMM.VEHICLES[unit.model].ammoTypes) if (unit.ammo[k] > 0) r = Math.max(r, TMM.AMMO[k].rangeM);
+    return r || TMM.AMMO[unit.ammoType].rangeM;
+  }
+  function pickAmmo(game, unit, target) {
+    if (!choosesAmmo(game, unit)) return;
+    const d = B().distanceM(game.map, unit, target);
+    const m = I().fireMods(game, unit, target);
+    const tank = TMM.VEHICLES[target.model].cls === 'tank';
+    let want = tank && (m.hullDown || m.obs >= 0.25) && d <= 2000 ? 'K277' : tank ? 'K276' : 'K277';
+    if (d > TMM.AMMO[want].rangeM || unit.ammo[want] <= 0) want = want === 'K277' ? 'K276' : 'K277';
+    if (unit.ammo[want] > 0 && d <= TMM.AMMO[want].rangeM) unit.ammoType = want;
+  }
+
   // 자동 교전 우선순위: 전차 > 트럭 > 보병 (적은 보병에 철갑탄을 쓰지 않는다)
   const CLS_RANK = { tank: 0, truck: 1, infantry: 2 };
   const SOFT_MAX_M = 1500;
@@ -64,7 +84,7 @@ TMM.Gunnery = (function () {
       else if (c && c.identified && c.kind === 'friendly') {
         unit.targetId = null;
         if (events) events.push({ type: 'cease-fire', unit, target: t, contact: c });
-      } else if (I().sees(game, unit, t) && inRange(game, unit, t, unit.ammoType)) return t;
+      } else if (I().sees(game, unit, t) && B().distanceM(game.map, unit, t) <= reach(game, unit)) return t;
     }
     const roe = side === 'friend' && unit.roe ? unit.roe : 'id';
     if (roe === 'hold') return null; // 사격 금지: 지정 목표만
@@ -80,7 +100,7 @@ TMM.Gunnery = (function () {
       if (side === 'enemy' && cls === 'infantry') continue;
       if (!I().sees(game, unit, t)) continue;
       const d = B().distanceM(game.map, unit, t);
-      if (d > TMM.AMMO[unit.ammoType].rangeM) continue;
+      if (d > reach(game, unit)) continue;
       if (unknown) {
         // 자유 사격: 미상 표적도 쏜다 (식별된 적보다 뒤 순위). 정체를 모르므로 종류로 고르지 않는다.
         if (d > TMM.RADIO.FREE_UNKNOWN_M) continue;
@@ -89,6 +109,7 @@ TMM.Gunnery = (function () {
         continue;
       }
       if (roe !== 'free' && d > FREE_FIRE_M[side]) continue; // 자유 사격(자동 교전)은 이 거리 안에서만 (더 먼 표적은 지정해야 쏜다)
+      if (unit.ai && unit.ai.fireM && d > unit.ai.fireM) continue; // M7a: 진지 방어 적의 매복 — 이 거리 안에 들어올 때까지 숨죽인다
       if (side === 'enemy' && cls !== 'tank' && d > SOFT_MAX_M) continue; // 적은 먼 트럭에 귀한 철갑탄을 쓰지 않는다
       let key = CLS_RANK[cls] * 1e6 + d;
       // 적 포수는 옆구리·뒤를 보이는 전차를 먼저 노린다 (정면은 안 뚫리므로) — 정면이면 1km 더 먼 것처럼 친다
@@ -152,6 +173,10 @@ TMM.Gunnery = (function () {
 
     const target = chooseTarget(game, unit, events);
     if (!target) { f.targetId = null; return; }
+    if (f.targetId !== target.id || B().distanceM(game.map, unit, target) > TMM.AMMO[unit.ammoType].rangeM) {
+      pickAmmo(game, unit, target);
+      if (B().distanceM(game.map, unit, target) > TMM.AMMO[unit.ammoType].rangeM) { f.targetId = null; return; }
+    }
     if (f.targetId !== target.id) {
       f.targetId = target.id;
       // M5: 포수 실력. M6: 1호차는 소대장이 지도를 보는 동안 포수 혼자 표적을 잡아 느리다

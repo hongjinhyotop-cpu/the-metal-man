@@ -1,11 +1,16 @@
 /*
- * 시작점: 시작 화면(주간/야간 선택) → 게임 상태를 만들고, 입력·그리기·패널을 연결해 주 루프를 돌린다.
+ * 시작점: 처음 화면(이어하기·새 캠페인·훈련 모드, TMM.CampaignUI) → 게임 상태를 만들고, 입력·그리기·패널을 연결해 주 루프를 돌린다.
+ * M7a: 한 페이지에서 전투는 한 번. 캠페인 화면(프롤로그·작전 명령·재정비·엔딩)은 전투 밖에서 돌고, 작전 명령의 '출동'이 boot 를 부른다.
  */
 (function () {
   const C = TMM.CONFIG;
 
-  function createGame(light) {
-    const game = TMM.Battle.create({ light });
+  // setup: { light } 훈련 모드 / { campaign: state } M7a 캠페인 작전
+  function createGame(setup) {
+    const camp = setup.campaign || null;
+    const op = camp ? TMM.Campaign.battleSpec(camp) : null;
+    const game = TMM.Battle.create({ light: setup.light, op, crew: camp ? camp.crew : undefined, map: TMM._map });
+    game.campaign = camp;
     Object.assign(game, {
       selectedId: null,
       paused: true, // 처음에는 작전 대기 상태
@@ -22,21 +27,40 @@
     return game;
   }
 
-  // ---- 시작 화면 ----
-  function showStart() {
+  // ---- 훈련 모드 시작 화면 (주간/야간 선택, M7a 전까지의 단일 전투) ----
+  let trainingWired = false;
+  function showTraining() {
     const el = document.getElementById('start');
-    let light = 'day';
-    el.querySelectorAll('[data-light]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        light = btn.dataset.light;
-        el.querySelectorAll('[data-light]').forEach((b) => b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
+    if (!trainingWired) {
+      trainingWired = true;
+      let light = 'day';
+      el.querySelectorAll('[data-light]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          light = btn.dataset.light;
+          el.querySelectorAll('[data-light]').forEach((b) => b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
+        });
       });
-    });
-    el.querySelector('[data-go]').addEventListener('click', () => {
-      el.hidden = true;
-      boot(light);
-    });
+      el.querySelector('[data-go]').addEventListener('click', () => {
+        el.hidden = true;
+        boot({ light });
+      });
+      el.querySelector('[data-back]').addEventListener('click', () => {
+        el.hidden = true;
+        TMM.CampaignUI.title();
+      });
+    }
     el.hidden = false;
+  }
+
+  // ---- M7a 처음 화면: 이어하기 / 새 캠페인 / 훈련 모드 ----
+  // 한 페이지에서 전투는 한 번만 돈다. 전투가 끝나면 결과 화면의 버튼이 다음 화면을 정해 두고 페이지를 다시 연다(sessionStorage 'tmm.next').
+  function showEntry() {
+    TMM.CampaignUI.init({ training: showTraining, battle: (s) => boot({ campaign: s }) });
+    let next = null;
+    try { next = sessionStorage.getItem('tmm.next'); sessionStorage.removeItem('tmm.next'); } catch (e) { /* 저장소 없음 */ }
+    if (next === 'campaign' && TMM.Campaign.load()) return TMM.CampaignUI.route(TMM.Campaign.load());
+    if (next === 'training') return showTraining();
+    TMM.CampaignUI.title();
   }
 
   let scopeGuided = false; // 조준 화면 첫 안내는 한 번만
@@ -52,8 +76,10 @@
     toastTimer = setTimeout(() => { el.hidden = true; }, kind === 'ff' ? 5000 : 3000);
   }
 
-  function boot(light) {
-    const game = (TMM.game = createGame(light));
+  function boot(setup) {
+    const game = (TMM.game = createGame(setup));
+    const light = game.light;
+    const camp = game.campaign;
     const canvas = document.getElementById('map-canvas');
     const ctx = canvas.getContext('2d');
     const view = TMM.Renderer.createView();
@@ -226,6 +252,7 @@
           return;
         }
         u.ammoType = next;
+        u.ammoPinnedUntil = game.gameSeconds + 120; // M7a: 소대장이 고른 탄종은 2분 동안 포수가 바꾸지 않는다
         u.fire.reload = Math.max(u.fire.reload, 3); // 탄을 바꿔 넣는 시간 (게임용 추정치)
         log('소대장', u.callsign + ', ' + TMM.AMMO[next].short + '으로 전환.', 'order');
         log(u.callsign, '수신. ' + TMM.AMMO[next].name + ' 장전.', 'report');
@@ -340,7 +367,21 @@
     if (window.ResizeObserver) new ResizeObserver(resize).observe(canvas);
     resize();
 
-    log('체계', '작전 지도 로드 완료. K1A2 전차 4대 주둔지 대기 중. ' + TMM.LIGHT[light].name + ' 작전.', 'system');
+    if (camp) {
+      const op = game.op;
+      log('체계', '작전 ' + op.no + ' · ' + op.name + ' (' + op.when + '). K1A2 전차 ' + game.units.length + '대 대기 중.', 'system');
+      const ctrl = TMM.Radio.controlUnit(game);
+      if (ctrl && ctrl.id !== 1) {
+        cmd.to = String(ctrl.id);
+        log('체계', '1호차가 없어 소대장은 ' + ctrl.callsign + '에 타고 지휘합니다. 조준 화면은 쓸 수 없습니다.', 'warn');
+      }
+      for (const u of game.units) {
+        const heavy = ['track', 'engine'].filter((k) => u.damage[k]).map((k) => TMM.PARTS[k].name);
+        if (heavy.length) log('체계', u.callsign + ' — 지난 작전의 ' + heavy.join('·') + ' 손상이 남아 있습니다' + (u.damage.track ? ' (이동 불가)' : ' (속도 절반)') + '.', 'warn');
+      }
+    } else {
+      log('체계', '작전 지도 로드 완료. K1A2 전차 4대 주둔지 대기 중. ' + TMM.LIGHT[light].name + ' 작전.', 'system');
+    }
 
     // 무전망(TMM.Radio)이 만든 교신과, 무전망을 거치지 않는 알림(전장관리체계 경고·중대 무전·화면 효과)
     function report(ev, realT) {
@@ -392,6 +433,16 @@
         else if (u.model === 'TRUCK') log(TMM.RADIO.COMPANY, '보급 트럭이 관측초소에서 국도로 주둔지에 복귀한다. 피아식별장치 없음, 오인사격 주의.', 'system');
         else log(TMM.RADIO.COMPANY, '인접 중대 K2 전차 1대가 동부 도로로 와서 주둔지를 지나 남쪽으로 이동한다.', 'system');
       } else if (ev.type === 'over') {
+        if (camp) {
+          // M7a: 결과 이월·재정비·저장은 작전이 끝나는 순간에 (결과 화면에서 창을 닫아도 이어할 수 있게)
+          const r = game.over;
+          log(TMM.RADIO.COMPANY, '강철, 여기 강철 6. ' + r.reason + (r.result === 'success' ? ' 수고했다.' : r.result === 'collapse' ? ' 남은 전차는 후방으로 철수하라.' : ' 다음 작전을 준비하라.') + ' 이상.', 'system');
+          TMM.Campaign.record(camp, game);
+          const saved = TMM.Campaign.save(camp);
+          if (!saved) toast('브라우저 저장소를 쓸 수 없어 자동 저장하지 못했습니다.', 'warn');
+          TMM.Result.show(game, { campaign: camp });
+          return;
+        }
         if (ev.win) {
           if (game.enemies.some((e) => e.exited)) log(TMM.RADIO.COMPANY, '적 천마호 소대 퇴각 확인. 진지 사수, 작전 성공. 수고했다.', 'system');
           else log(TMM.RADIO.COMPANY, '적 천마호 소대 격멸 확인. 수고했다.', 'system');
@@ -400,8 +451,12 @@
       }
     }
 
-    log(TMM.RADIO.COMPANY, '강철, 여기 강철 6. 적 천마호 전차 1개 소대(4대), 매봉 능선·새터읍 일대에서 남하 중. 강철은 주둔지를 지키며 저지하라. 이상.', 'system');
-    log(TMM.RADIO.COMPANY, '전방 저수지 동쪽 숲에 아군 보병 분대(관측초소)와 보급 트럭이 있다. 둘 다 피아식별장치 없음 — 식별 전 사격 주의. 이상.', 'system');
+    if (camp) {
+      for (const t of game.op.intro) log(TMM.RADIO.COMPANY, t, 'system');
+    } else {
+      log(TMM.RADIO.COMPANY, '강철, 여기 강철 6. 적 천마호 전차 1개 소대(4대), 매봉 능선·새터읍 일대에서 남하 중. 강철은 주둔지를 지키며 저지하라. 이상.', 'system');
+      log(TMM.RADIO.COMPANY, '전방 저수지 동쪽 숲에 아군 보병 분대(관측초소)와 보급 트럭이 있다. 둘 다 피아식별장치 없음 — 식별 전 사격 주의. 이상.', 'system');
+    }
     log('체계', '1호차는 직접 조작, 2·3·4호차는 무전으로 지휘합니다. 오른쪽 위 [무전 지휘] 창에서 받는 대상과 명령을 고르십시오.', 'system');
 
     // M6: 교신 두절 감시 (조준 화면 경고)
@@ -431,6 +486,15 @@
       reloadWas = r;
     }
 
+    // M7a: 작전 목표 띠 (지도 왼쪽 위)
+    const hud = document.getElementById('op-hud');
+    let hudAt = 0;
+    function updateHud() {
+      const st = TMM.Objective.status(game);
+      hud.innerHTML = '<b>' + st.title + '</b><span>' + st.goal + '</span><span class="mono">' + st.timeLabel + ' ' + st.time + ' · ' + st.enemy + '</span>';
+    }
+    if (game.op) { hud.hidden = false; updateHud(); }
+
     let last = performance.now();
     function frame(now) {
       const dt = Math.min(0.1, (now - last) / 1000);
@@ -453,6 +517,7 @@
       else TMM.Renderer.drawFrame(ctx, view, game, terrain, now / 1000);
       TMM.Panel.update(game);
       TMM.CommandBar.update(game);
+      if (game.op && now - hudAt > 250) { hudAt = now; updateHud(); }
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
@@ -467,8 +532,8 @@
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => whenFontsReady(showStart));
+    document.addEventListener('DOMContentLoaded', () => whenFontsReady(showEntry));
   } else {
-    whenFontsReady(showStart);
+    whenFontsReady(showEntry);
   }
 })();

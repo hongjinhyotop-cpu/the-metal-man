@@ -22,8 +22,11 @@ TMM.Enemy = (function () {
   // 소대가 전투력을 잃으면 빠져나가는 곳: 지도 북쪽 끝 국도
   const EXIT = { x: 108, y: 0.6 };
 
-  function create() {
-    return ROSTER.map((d) => TMM.Damage.initCombat({
+  // spec (M7a 캠페인): 같은 모양의 목록. 더한 필드 —
+  //   static: 진지 방어 (움직이지 않고 보이는 아군과 싸움, 손상되면 후퇴) · delay: 작전 개시 후 이만큼(게임 초) 뒤에 움직임
+  //   engageM: 교전 거리 (집결·진지 도착과 상관없이 이 거리) · fireM: 이 거리 안의 표적만 쏨(매복) · stage: -1 이면 집결하지 않음 · heading
+  function create(spec) {
+    return (spec || ROSTER).map((d) => TMM.Damage.initCombat({
       id: d.id,
       num: d.n,
       side: 'enemy',
@@ -32,14 +35,14 @@ TMM.Enemy = (function () {
       team: 0,
       x: d.x,
       y: d.y,
-      heading: Math.PI / 2, // 남쪽을 향함
+      heading: d.heading != null ? d.heading : Math.PI / 2, // 남쪽을 향함
       path: [],
       dest: null,
       state: 'idle',
       speedKmh: 0,
       ai: {
-        mode: 'advance',
-        route: d.route.map(([x, y]) => ({ x, y })).concat([{ x: d.gx, y: d.gy }]),
+        mode: d.static ? 'defend' : 'advance',
+        route: (d.route || []).map(([x, y]) => ({ x, y })).concat(d.gx != null ? [{ x: d.gx, y: d.gy }] : []),
         wp: 0,
         stage: d.stage,
         staged: false,
@@ -48,9 +51,18 @@ TMM.Enemy = (function () {
         lane: d.lane,
         deployed: false,
         lastThreatAt: -1e9,
+        static: !!d.static,
+        delay: d.delay || 0,
+        pending: !!d.delay, // 아직 도착 전 (지도 밖에 있는 것으로 친다 — exited 와 같이 쓴다)
+        engageM: d.engageM || null,
+        fireM: d.fireM || null, // 이 거리 안에 들어온 표적만 쏜다 (진지 매복)
+        tag: d.tag || null, // 작전 목표용 표시 (교량 사수: 'west' 하천 서쪽에서 오는 적)
       },
-    }, 'CHONMA'));
+    }, 'CHONMA')).map((e) => {
+      if (e.ai.pending) e.exited = true; // 늦게 오는 적: 도착할 때까지 보이지도, 쏘지도 않는다
+      return e;
+    });
   }
 
-  return { create, RALLY, EXIT };
+  return { create, RALLY, EXIT, ROSTER };
 })();
