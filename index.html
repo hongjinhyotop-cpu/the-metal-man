@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Metal Man · 전차 소대 지휘</title>
+  <meta name="description" content="한반도 전쟁 72시간, K1A2 전차 소대장이 되어 전차 4대를 지휘하는 워게임">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">THE METAL MAN</span>
+      <span class="brand-sub">K1A2 전차 소대 · 작전 지도</span>
+    </div>
+    <div class="clock" aria-live="off">
+      <span class="label">작전 시각</span>
+      <span id="clock-time" class="mono big">D+0 05:00</span>
+      <span class="label">종료까지</span>
+      <span id="clock-remain" class="mono">72:00</span>
+    </div>
+    <div class="controls">
+      <span id="run-state" class="run-state paused">일시정지</span>
+      <div class="speed" role="group" aria-label="시간 배속">
+        <button type="button" data-speed="1" class="active">×1</button>
+        <button type="button" data-speed="2">×2</button>
+        <button type="button" data-speed="4">×4</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="map-wrap" aria-label="작전 지도">
+      <canvas id="map-canvas"></canvas>
+      <div id="pause-banner" class="pause-banner">
+        <span class="pb-title">작전 대기</span>
+        <span class="pb-hint">스페이스바를 누르면 작전을 개시합니다</span>
+      </div>
+      <div id="cursor-readout" class="cursor-readout">커서를 지도 위에 올리면 지형 정보가 표시됩니다</div>
+    </section>
+
+    <aside class="side">
+      <section class="card">
+        <h2>선택 전차</h2>
+        <div id="unit-info"></div>
+      </section>
+
+      <section class="card">
+        <h2>소대 현황</h2>
+        <ul id="roster" class="roster"></ul>
+      </section>
+
+      <section class="card log-card">
+        <h2>무전 기록</h2>
+        <ol id="radio-log" class="radio-log"></ol>
+      </section>
+
+      <section class="card">
+        <h2>조작법</h2>
+        <dl class="keys">
+          <dt>전차 클릭 / 1~4</dt><dd>전차 선택</dd>
+          <dt>지도 클릭</dt><dd>선택한 전차 이동</dd>
+          <dt>스페이스바</dt><dd>일시정지 / 재개</dd>
+          <dt>S</dt><dd>선택한 전차 정지</dd>
+          <dt>Esc / 오른쪽 클릭</dt><dd>선택 해제</dd>
+        </dl>
+      </section>
+
+      <section class="card">
+        <h2>지형과 기동 속도</h2>
+        <ul id="legend" class="legend"></ul>
+        <p class="note">하천은 다리로만 건널 수 있습니다.</p>
+      </section>
+    </aside>
+  </main>
+
+  <!-- 순서 중요: core → map → units → game/ui → render → main -->
+  <script src="js/core/config.js"></script>
+  <script src="js/core/noise.js"></script>
+  <script src="js/map/terrain-types.js"></script>
+  <script src="js/map/geography.js"></script>
+  <script src="js/map/mapgen.js"></script>
+  <script src="js/map/pathfinding.js"></script>
+  <script src="js/units/platoon.js"></script>
+  <script src="js/units/movement.js"></script>
+  <script src="js/game/clock.js"></script>
+  <script src="js/ui/radio-log.js"></script>
+  <script src="js/ui/panel.js"></script>
+  <script src="js/render/terrain-layer.js"></script>
+  <script src="js/render/renderer.js"></script>
+  <script src="js/game/input.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
