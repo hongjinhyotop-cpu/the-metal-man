@@ -15,10 +15,14 @@ TMM.MapGen = (function () {
     return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
   }
 
+  // 시야 계산용 높이의 잔기복 크기 (지도 그림은 0.06). 게임용 추정치.
+  const SIGHT_BUMP = 0.012;
+
   function generate() {
     const { COLS, ROWS, METERS_PER_CELL } = TMM.CONFIG;
     const type = new Uint8Array(COLS * ROWS);
     const elev = new Float32Array(COLS * ROWS);
+    const sightElev = new Float32Array(COLS * ROWS); // 시야 계산용 높이 (작은 기복을 줄임, M3)
 
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
@@ -26,6 +30,7 @@ TMM.MapGen = (function () {
         const i = r * COLS + c;
         const e = Geo.elevation(x, y);
         elev[i] = e;
+        sightElev[i] = Geo.elevation(x, y, SIGHT_BUMP);
         const rx = Geo.riverX(y);
 
         let t = T.OPEN;
@@ -78,16 +83,17 @@ TMM.MapGen = (function () {
       speedMs[i] = TMM.TERRAIN_INFO[type[i]].speed / 3.6;
     }
 
-    return createMap(COLS, ROWS, METERS_PER_CELL, type, elev, speedMs);
+    return createMap(COLS, ROWS, METERS_PER_CELL, type, elev, speedMs, sightElev);
   }
 
-  function createMap(cols, rows, metersPerCell, type, elev, speedMs) {
+  function createMap(cols, rows, metersPerCell, type, elev, speedMs, sightElev) {
     return {
       cols,
       rows,
       metersPerCell,
       type,
       elev,
+      sightElev,
       speedMs,
       maxSpeedMs: TMM.MAX_SPEED_KMH / 3.6,
 

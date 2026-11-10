@@ -39,7 +39,11 @@ TMM.Ballistics = (function () {
   }
   const ASPECT_NAMES = { front: '정면', side: '측면', rear: '후면' };
 
-  function hitChance(map, shooter, target, ammoId) {
+  /**
+   * 명중 확률. mods (M3, TMM.Intel.fireMods 가 만듦):
+   *   { obs: 가림 정도 0~1+, hullDown: 차체 엄폐, light: 'day'|'night' }
+   */
+  function hitChance(map, shooter, target, ammoId, mods) {
     const ammo = TMM.AMMO[ammoId];
     const veh = TMM.VEHICLES[shooter.model];
     const d = distanceM(map, shooter, target);
@@ -47,6 +51,14 @@ TMM.Ballistics = (function () {
     if (isMoving(shooter)) p *= veh.moveFireMul;
     if (isMoving(target)) p *= veh.targetMoveMul;
     if (shooter.damage.fcs) p *= TMM.DAMAGE_EFFECT.fcsHitMul;
+    p *= TMM.VEHICLES[target.model].size || 1;
+    if (mods) {
+      const V = TMM.VISION;
+      if (mods.hullDown) p *= V.HULL_DOWN_HIT;
+      if (mods.obs) p *= 1 - V.OBS_HIT * Math.min(1, mods.obs);
+      const sens = TMM.SENSORS[shooter.model];
+      if (sens && mods.light) p *= sens[mods.light].hitMul;
+    }
     return clamp(p, 0.02, 0.97);
   }
 
@@ -86,17 +98,25 @@ TMM.Ballistics = (function () {
    * 한 발 판정. 표적 상태는 바꾸지 않고 결과만 돌려준다.
    * 반환: { distM, pHit, hit, aspect, pPen, pen, destroyed, parts: [부위키...] }
    */
-  function resolveShot(map, shooter, target, ammoId, rand) {
+  function resolveShot(map, shooter, target, ammoId, rand, mods) {
     const res = { distM: distanceM(map, shooter, target), aspect: aspect(target, shooter), parts: [], destroyed: false, pen: false, hit: false };
-    res.pHit = hitChance(map, shooter, target, ammoId);
+    res.pHit = hitChance(map, shooter, target, ammoId, mods);
     res.hit = rand() < res.pHit;
     if (!res.hit) return res;
 
     const ammo = TMM.AMMO[ammoId];
+    const tveh = TMM.VEHICLES[target.model];
+    if (tveh.soft) {
+      // 트럭·보병: 장갑이 없다. 파괴(전투력 상실) 아니면 사상자·손상(hurt). 두 번째 피해는 파괴.
+      res.pen = true;
+      if (target.hurt || rand() < tveh.killOnPen) res.destroyed = true;
+      else res.hurt = true;
+      return res;
+    }
     res.pPen = penChance(map, shooter, target, ammoId, res.aspect);
     res.pen = rand() < res.pPen;
     if (res.pen) {
-      const kill = TMM.VEHICLES[target.model].killOnPen * ammo.killMul;
+      const kill = tveh.killOnPen * ammo.killMul;
       if (rand() < kill) {
         res.destroyed = true;
         return res;

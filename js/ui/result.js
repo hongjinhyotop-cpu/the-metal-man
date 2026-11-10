@@ -1,6 +1,6 @@
 /*
  * 승패 결과 화면 (간단판).
- *   승리: 적 천마호 소대 4대 모두 격파 / 패배: 아군 4대 모두 격파
+ *   승리: 적 천마호 소대를 모두 격파했거나, 전투력을 잃은 적이 북쪽 끝 밖으로 퇴각 / 패배: 아군 4대 모두 격파
  */
 TMM.Result = (function () {
   let el = null;
@@ -13,20 +13,30 @@ TMM.Result = (function () {
   function show(game) {
     const win = game.over.win;
     const lost = game.units.filter((u) => u.destroyed).length;
-    const kills = game.enemies.filter((e) => e.destroyed).length;
+    const kills = game.enemies.filter((e) => e.destroyed && !e.abandoned).length;
+    const aband = game.enemies.filter((e) => e.abandoned).length;
+    const gone = game.enemies.filter((e) => e.exited).length;
+    const allyLost = game.allies.filter((a) => a.destroyed).length;
     let shots = 0, hits = 0;
     for (const u of game.units) { shots += u.stats.shots; hits += u.stats.hits; }
-    const elapsed = game.over.at - TMM.CONFIG.START_SECONDS;
+    const elapsed = game.over.at - game.startSeconds;
 
     el.classList.toggle('win', win);
     el.classList.toggle('lose', !win);
     el.querySelector('.r-title').textContent = win ? '작전 성공' : '작전 실패';
-    el.querySelector('.r-sub').textContent = win ? '적 천마호 전차 소대를 격멸했습니다.' : '소대의 전차가 모두 격파되었습니다.';
+    el.querySelector('.r-sub').textContent = !win
+      ? '소대의 전차가 모두 격파되었습니다.'
+      : gone || aband
+        ? '적 천마호 소대가 전투력을 잃고 북쪽으로 퇴각했습니다.'
+        : '적 천마호 전차 소대를 격멸했습니다.';
 
     const rows = [
-      ['적 전차 격파', kills + ' / ' + game.enemies.length + ' 대'],
+      ['적 전차 격파', kills + ' / ' + game.enemies.length + ' 대' + (aband ? ' (유기 ' + aband + '대 별도)' : '') + (gone ? ' · 퇴각 ' + gone + '대' : '')],
       ['아군 손실', lost + ' / ' + game.units.length + ' 대'],
       ['사용 탄약', shots + ' 발 (명중 ' + hits + ' 발' + (shots ? ', ' + Math.round((hits / shots) * 100) + '%' : '') + ')'],
+      ['오인사격', game.ffCount ? game.ffCount + ' 회 — 아군 피해 주의' : '없음'],
+      ['비지휘 아군 손실', allyLost ? allyLost + ' (' + game.allies.filter((a) => a.destroyed).map((a) => a.callsign).join(', ') + ')' : '없음'],
+      ['작전 시간', TMM.LIGHT[game.light].name],
       ['작전 경과', TMM.Clock.duration(elapsed) + ' (' + TMM.Clock.format(game.over.at) + ')'],
     ];
     const dl = el.querySelector('.r-stats');

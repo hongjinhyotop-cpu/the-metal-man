@@ -18,6 +18,7 @@ TMM.Movement = (function () {
 
     const est = TMM.Path.estimate(map, pts);
     est.sec /= mul(unit);
+    if (unit.fixedSpeedKmh) est.sec = est.meters / (unit.fixedSpeedKmh / 3.6);
     unit.path = pts.slice(1);
     unit.dest = { x: tx, y: ty };
     unit.state = 'moving';
@@ -49,7 +50,8 @@ TMM.Movement = (function () {
         continue;
       }
       // 통행 불가 칸 모서리를 스칠 때도 멈추지 않도록 최소 속도 보정
-      const ms = (map.speedMsAt(unit.x, unit.y) || map.maxSpeedMs * 0.15) * mul(unit);
+      // 보병처럼 지형과 상관없이 같은 속도로 걷는 부대는 fixedSpeedKmh (M3)
+      const ms = unit.fixedSpeedKmh ? unit.fixedSpeedKmh / 3.6 : (map.speedMsAt(unit.x, unit.y) || map.maxSpeedMs * 0.15) * mul(unit);
       unit.speedKmh = ms * 3.6;
       unit.heading = Math.atan2(dy, dx);
       const cellsPerSec = ms / map.metersPerCell;
@@ -77,6 +79,7 @@ TMM.Movement = (function () {
     if (unit.state !== 'moving') return null;
     const est = TMM.Path.estimate(map, [{ x: unit.x, y: unit.y }].concat(unit.path));
     est.sec /= mul(unit);
+    if (unit.fixedSpeedKmh) est.sec = est.meters / (unit.fixedSpeedKmh / 3.6);
     return est;
   }
 

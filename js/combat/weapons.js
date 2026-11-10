@@ -22,7 +22,7 @@ TMM.AMMO = {
     caliber: '120mm',
     rangeM: 3000, // 게임용 추정치: 최대 교전 거리
     // 게임용 추정치: 정지 사수 → 정지 표적 명중 확률
-    hit: [[0, 0.95], [1000, 0.88], [2000, 0.6], [3000, 0.22]],
+    hit: [[0, 0.95], [1000, 0.85], [2000, 0.45], [2500, 0.25], [3000, 0.12]], // M3 에서 원거리 명중을 낮춤 (2km 밖은 표적이 작고 신기루·먼지)
     // 게임용 추정치: 관통하지 못해도 외부 장비(궤도·조준경 등)가 손상될 확률
     externalDamage: 0.2,
     killMul: 1.0, // 관통 시 격파 확률 배수
@@ -34,7 +34,7 @@ TMM.AMMO = {
     use: '장갑차·건물·보병용',
     caliber: '120mm',
     rangeM: 2500, // 게임용 추정치: 철갑탄보다 탄속이 느려 유효 거리가 짧다
-    hit: [[0, 0.92], [1000, 0.82], [2000, 0.45], [2500, 0.25]],
+    hit: [[0, 0.92], [1000, 0.8], [2000, 0.35], [2500, 0.15]],
     externalDamage: 0.45, // 폭발 효과로 외부 장비 손상이 잦다 (게임용 추정치)
     killMul: 0.9,
   },
@@ -45,7 +45,7 @@ TMM.AMMO = {
     use: '전차용',
     caliber: '115mm',
     rangeM: 3000, // 게임용 추정치: 구형 사격통제장치라 2km 밖은 명중을 기대하기 어렵지만, 보이면 사격은 한다
-    hit: [[0, 0.85], [500, 0.72], [1000, 0.5], [1500, 0.32], [2000, 0.18], [2500, 0.09], [3000, 0.05]],
+    hit: [[0, 0.85], [500, 0.77], [1000, 0.62], [1500, 0.45], [2000, 0.24], [2500, 0.1], [3000, 0.05]],
     externalDamage: 0.25,
     killMul: 1.0,
   },
@@ -61,21 +61,34 @@ TMM.PENETRATION = {
   K276: {
     CHONMA: { front: [0.97, 0.9], side: [0.99, 0.97], rear: [0.99, 0.98] },
     K1A2: { front: [0.25, 0.1], side: [0.85, 0.7], rear: [0.95, 0.9] },
+    K2: { front: [0.15, 0.05], side: [0.75, 0.6], rear: [0.9, 0.85] }, // 오인사격용
   },
   K277: {
     CHONMA: { front: [0.8, 0.8], side: [0.93, 0.93], rear: [0.96, 0.96] },
     K1A2: { front: [0.05, 0.05], side: [0.5, 0.5], rear: [0.8, 0.8] },
+    K2: { front: [0.03, 0.03], side: [0.4, 0.4], rear: [0.75, 0.75] },
   },
   E115: {
-    K1A2: { front: [0.12, 0.05], side: [0.6, 0.45], rear: [0.85, 0.7] },
+    K1A2: { front: [0.12, 0.05], side: [0.7, 0.55], rear: [0.9, 0.8] },
+    K2: { front: [0.06, 0.02], side: [0.5, 0.35], rear: [0.8, 0.65] },
     CHONMA: { front: [0.6, 0.4], side: [0.9, 0.8], rear: [0.95, 0.9] },
   },
 };
 
+/*
+ * 차종. M3 에서 더한 필드:
+ *   cls:  'tank' | 'truck' | 'infantry' (지도 기호·표적 우선순위)
+ *   iff:  피아식별장치 (아군이 탐지하면 곧바로 '아군'으로 식별됨). K1A2·K2 에 있음.
+ *   soft: 장갑이 없는 표적 (트럭·보병). 맞으면 관통 판정 없이 피해를 입는다.
+ *   size: 표적 크기에 따른 명중 배수 (보병 분대는 흩어져 있어 맞히기 어려움)
+ */
 TMM.VEHICLES = {
   K1A2: {
     id: 'K1A2',
     name: 'K1A2',
+    cls: 'tank',
+    iff: true,
+    size: 1,
     gun: '120mm 활강포',
     ammoLoad: { K276: 20, K277: 12 }, // 합계 32발. 탄종 배분은 게임용 추정치
     ammoTypes: ['K276', 'K277'],
@@ -84,22 +97,65 @@ TMM.VEHICLES = {
     moveFireMul: 0.8, // 기동 간 사격 시 명중 배수 (2축 안정화)
     targetMoveMul: 0.7, // 움직이는 표적 명중 배수 (사격통제장치가 리드 계산해도 원거리에선 오차)
     canFireOnMove: true,
-    killOnPen: 0.3, // 관통 시 격파 확률 (탄약 분리 보관) — 게임용 추정치
+    killOnPen: 0.5, // 관통 시 격파 확률 (탄약 분리 보관) — 게임용 추정치 (M3 에서 0.3 → 0.5)
     turnDegPerSec: 25, // 정지 중 차체를 표적 쪽으로 돌리는 속도
   },
   CHONMA: {
     id: 'CHONMA',
     name: '천마호',
+    cls: 'tank',
+    iff: false,
+    size: 1,
     gun: '115mm 활강포',
     ammoLoad: { E115: 40 }, // T-62 계열 적재량 기준 (게임용 추정치)
     ammoTypes: ['E115'],
-    reloadSec: 12, // 게임용 추정치: 좁은 포탑, 수동 장전
-    aimSec: 8,
+    reloadSec: 10, // 게임용 추정치: 좁은 포탑, 수동 장전 (M3 에서 12 → 10)
+    aimSec: 6,
     moveFireMul: 0.35,
     targetMoveMul: 0.6,
     canFireOnMove: false,
     killOnPen: 0.65, // 포탑 바닥·차체 안 탄약 적재로 유폭 위험 큼 — 게임용 추정치
     turnDegPerSec: 20,
+  },
+  // ---- M3: 플레이어가 지휘하지 않는 아군 (사격하지 않음) ----
+  K2: {
+    id: 'K2',
+    name: 'K2',
+    cls: 'tank',
+    iff: true, // 피아식별장치 → 탐지 즉시 아군으로 표시
+    size: 1,
+    gun: '120mm 55구경장 활강포',
+    ammoLoad: {},
+    ammoTypes: [],
+    reloadSec: 5,
+    aimSec: 3,
+    moveFireMul: 0.85,
+    targetMoveMul: 0.75,
+    canFireOnMove: true,
+    killOnPen: 0.25,
+    turnDegPerSec: 30,
+  },
+  TRUCK: {
+    id: 'TRUCK',
+    name: '보급 트럭',
+    cls: 'truck',
+    iff: false, // 피아식별장치 없음 → 식별 전에는 미상 표적
+    soft: true,
+    size: 0.9,
+    ammoLoad: {},
+    ammoTypes: [],
+    killOnPen: 0.85, // 맞으면 대개 파괴 (게임용 추정치)
+  },
+  INF: {
+    id: 'INF',
+    name: '보병 분대',
+    cls: 'infantry',
+    iff: false,
+    soft: true,
+    size: 0.5, // 흩어진 보병은 전차포로 맞히기 어려움 (게임용 추정치)
+    ammoLoad: {},
+    ammoTypes: [],
+    killOnPen: 0.55, // 명중 시 분대 전투력 상실 확률, 아니면 사상자 발생 (게임용 추정치)
   },
 };
 

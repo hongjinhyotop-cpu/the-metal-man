@@ -20,6 +20,8 @@
   --ok: #9cc46a;
   --enemy: #e0563f;
   --dead: #7d7a6a;
+  --unknown: #e8cf4a;
+  --ally: #7fb6e8;
   --font: "IBM Plex Sans KR", "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "Consolas", monospace;
 }
@@ -406,11 +408,143 @@ button {
 .l-speed { font-family: var(--mono); color: var(--text-dim); }
 .note { margin: 8px 0 0; font-size: 12px; color: var(--text-faint); }
 
+/* ---------- M3 탐지와 식별 ---------- */
+.light-state {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+}
+.light-state.night { border-color: var(--ally); color: var(--ally); background: rgba(40, 70, 110, 0.35); }
+
+.sight-hint {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  padding: 3px 8px;
+  background: rgba(18, 22, 13, 0.85);
+  border: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+.sight-hint.on { color: var(--ok); border-color: var(--ok); }
+
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 52px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  padding: 8px 16px;
+  background: rgba(30, 26, 8, 0.95);
+  border: 1px solid var(--unknown);
+  color: var(--unknown);
+  font-weight: 600;
+  font-size: 14px;
+  pointer-events: none;
+  z-index: 4;
+  text-align: center;
+}
+.toast[hidden] { display: none; }
+.toast.ff {
+  background: rgba(120, 18, 10, 0.95);
+  border: 2px solid #ff6a50;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 12px 22px;
+}
+
+/* 시작 화면 */
+.start {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(10, 12, 7, 0.92);
+  z-index: 6;
+  padding: 16px;
+  overflow-y: auto;
+}
+.start[hidden] { display: none; }
+.s-box {
+  width: 560px;
+  max-width: 100%;
+  padding: 20px 24px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--accent);
+}
+.s-kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; color: var(--text-faint); }
+.s-title { font-family: var(--mono); font-weight: 700; font-size: 24px; letter-spacing: 0.3em; color: var(--accent); margin: 4px 0 10px; }
+.s-brief { margin: 0 0 10px; color: var(--text-dim); font-size: 13.5px; }
+.s-brief b { color: var(--text); }
+.s-brief b.q { color: var(--unknown); }
+.s-brief b.f { color: var(--ally); }
+.s-label { font-size: 11px; letter-spacing: 0.14em; color: var(--text-faint); margin: 14px 0 6px; }
+.s-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+.s-opts button {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  color: var(--text-dim);
+}
+.s-opts button b { font-family: var(--mono); font-size: 16px; color: var(--text); letter-spacing: 0.2em; }
+.s-opts button span { font-size: 12px; }
+.s-opts button[aria-pressed="true"] { border-color: var(--accent); background: var(--panel-2); }
+.s-opts button[aria-pressed="true"] b { color: var(--accent); }
+.s-opts button[data-light="night"][aria-pressed="true"] { border-color: var(--ally); }
+.s-opts button[data-light="night"][aria-pressed="true"] b { color: var(--ally); }
+.s-opts button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.s-go { font-size: 14px; padding: 8px 22px; }
+
+/* 접촉 현황 */
+.c-sum { margin: 0 0 6px; font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
+.enemy-roster li.none { display: block; color: var(--text-faint); }
+.enemy-roster li.k-unknown .e-tag { background: var(--unknown); color: #1a1604; }
+.enemy-roster li.k-friend .e-tag { background: var(--ally); color: #081420; }
+.enemy-roster li.k-friend .e-name { color: var(--ally); }
+.enemy-roster li.k-unknown .e-name { color: var(--unknown); }
+.enemy-roster li.k-dead .e-tag { background: var(--dead); }
+.enemy-roster li.k-dead .e-name, .enemy-roster li.k-dead .e-state { color: var(--text-faint); }
+.enemy-roster li.lost:not(.k-dead) { opacity: 0.6; }
+.enemy-roster li { grid-template-columns: 16px auto 1fr; }
+.enemy-roster .e-tag { width: auto; min-width: 16px; padding: 0 3px; }
+
+.kv .ok, .combat .ok { color: var(--ok); font-weight: 600; }
+.kv .warn, .combat .warn { color: var(--warn); font-weight: 600; }
+
+/* 무전 기록: 오인사격 */
+.radio-log .log-ff { background: rgba(160, 24, 12, 0.35); border-left: 3px solid #ff6a50; padding-left: 4px; }
+.radio-log .log-ff b, .radio-log .log-ff span { color: #ffd0c4; font-weight: 700; }
+
+/* 지도 기호 범례 */
+.symbols { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; font-size: 12.5px; color: var(--text-dim); }
+.symbols li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: center; }
+.sym { width: 18px; height: 14px; display: grid; place-items: center; font-family: var(--mono); font-weight: 700; font-size: 11px; }
+.sym-unknown { border: 2px solid var(--unknown); border-radius: 50%; color: var(--unknown); width: 16px; height: 16px; }
+.sym-enemy { width: 12px; height: 12px; border: 2px solid var(--enemy); transform: rotate(45deg); background: rgba(40, 12, 8, 0.9); }
+.sym-ally { border: 2px solid var(--ally); background: rgba(10, 20, 30, 0.85); }
+.sym-ghost { width: 12px; height: 12px; border: 2px dashed rgba(224, 86, 63, 0.6); transform: rotate(45deg); }
+.sym-hull { height: 8px; border-top: 3px solid var(--ok); border-radius: 50% 50% 0 0; }
+
 /* ---------- 좁은 화면 ---------- */
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; }
   .map-wrap { height: auto; min-height: 0; aspect-ratio: 4 / 3; border-right: none; border-bottom: 1px solid var(--line); }
   .cursor-readout { display: none; }
+  .s-opts { grid-template-columns: 1fr; }
+  .toast.ff { font-size: 15px; }
   .pause-banner { top: 8px; padding: 5px 14px; }
   .pb-hint { font-size: 11px; }
   .side { max-height: none; }

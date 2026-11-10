@@ -14,6 +14,9 @@ TMM.Damage = (function () {
     unit.targetId = null; // 지정 사격 목표 (플레이어가 지정)
     unit.fire = { targetId: null, aim: 0, reload: 0 }; // 지금 겨누는 표적, 남은 조준·장전 시간
     unit.stats = { shots: 0, hits: 0, kills: 0 };
+    unit.hurt = false; // 트럭·보병의 '사상자 발생' 상태 (M3)
+    unit.exited = false; // 지도 밖으로 나감 (후퇴한 적, 지나간 아군) (M3)
+    unit.lastFiredAt = null; // 마지막 사격 시각 — 포구 섬광으로 잘 보임 (M3)
     return unit;
   }
 
@@ -30,6 +33,10 @@ TMM.Damage = (function () {
       TMM.Movement.stop(unit);
       return [];
     }
+    if (res.hurt) {
+      unit.hurt = true;
+      return [];
+    }
     const fresh = res.parts.filter((k) => !unit.damage[k]);
     for (const k of fresh) unit.damage[k] = true;
     if (unit.damage.track && unit.state === 'moving') TMM.Movement.stop(unit);
@@ -38,7 +45,8 @@ TMM.Damage = (function () {
 
   // 짧은 상태 문구: '격파' / '정상' / '궤도·엔진 손상'
   function summary(u) {
-    if (u.destroyed) return '격파';
+    if (u.destroyed) return TMM.VEHICLES[u.model].soft ? '파괴' : '격파';
+    if (u.hurt) return u.model === 'INF' ? '사상자 발생' : '손상';
     const parts = damagedParts(u);
     if (!parts.length) return '정상';
     return parts.map((k) => TMM.PARTS[k].name).join('·') + ' 손상';

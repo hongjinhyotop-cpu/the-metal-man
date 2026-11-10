@@ -1,9 +1,9 @@
 /*
  * 마우스·키보드 입력.
  *   전차 클릭: 선택 / 지도 클릭: 선택 전차 이동 지시
- *   적 전차 클릭: 선택 전차의 사격 목표 지정
+ *   표적 클릭(적·미상 표적): 선택 전차의 사격 목표 지정 (지도에 보이는 접촉만 클릭할 수 있다)
  *   스페이스바: 일시정지·재개 / 1~4: 호차 선택 / S: 정지 / Esc: 선택 해제
- *   Q: 탄종 전환 / X: 사격 목표 해제
+ *   Q: 탄종 전환 / X: 사격 목표 해제 / V: 선택 전차의 시야 표시
  */
 TMM.Input = (function () {
   function init(game, canvas, view, actions) {
@@ -17,11 +17,14 @@ TMM.Input = (function () {
       const m = view.toMap(p.x, p.y);
       game.hover = game.map.typeAt(m.x, m.y) >= 0 ? m : null;
       const overUnit = TMM.Renderer.hitUnit(view, game.units, p.x, p.y);
-      const overEnemy = overUnit ? null : TMM.Renderer.hitUnit(view, game.enemies, p.x, p.y);
-      game.hoverEnemyId = overEnemy ? overEnemy.id : null;
+      const overMark = overUnit ? null : TMM.Renderer.hitUnit(view, TMM.Renderer.contactMarks(game), p.x, p.y);
+      game.hoverContactId = overMark ? overMark.id : null;
       let cursor = 'default';
       if (overUnit) cursor = 'pointer';
-      else if (overEnemy) cursor = game.selectedId && !overEnemy.destroyed ? 'crosshair' : 'help';
+      else if (overMark) {
+        const c = overMark.contact;
+        cursor = game.selectedId && !c.wreck && c.kind !== 'friendly' ? 'crosshair' : 'help';
+      }
       else if (game.selectedId && game.hover) {
         cursor = game.map.infoAt(m.x, m.y).speed ? 'crosshair' : 'not-allowed';
       }
@@ -30,7 +33,7 @@ TMM.Input = (function () {
 
     canvas.addEventListener('mouseleave', () => {
       game.hover = null;
-      game.hoverEnemyId = null;
+      game.hoverContactId = null;
     });
 
     canvas.addEventListener('click', (ev) => {
@@ -40,9 +43,9 @@ TMM.Input = (function () {
         actions.select(hit.id);
         return;
       }
-      const foe = TMM.Renderer.hitUnit(view, game.enemies, p.x, p.y);
-      if (foe) {
-        if (game.selectedId) actions.target(game.selectedId, foe.id);
+      const mark = TMM.Renderer.hitUnit(view, TMM.Renderer.contactMarks(game), p.x, p.y);
+      if (mark) {
+        if (game.selectedId) actions.target(game.selectedId, mark.id);
         return;
       }
       if (!game.selectedId) return;
@@ -78,6 +81,10 @@ TMM.Input = (function () {
       }
       if (ev.code === 'KeyX' && game.selectedId) {
         actions.clearTarget(game.selectedId);
+        return;
+      }
+      if (ev.code === 'KeyV') {
+        actions.toggleSight();
         return;
       }
       if (ev.code === 'Escape') actions.select(null);

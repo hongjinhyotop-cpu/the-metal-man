@@ -23,6 +23,7 @@
       <span id="clock-remain" class="mono">72:00</span>
     </div>
     <div class="controls">
+      <span id="light-state" class="light-state">주간</span>
       <span id="run-state" class="run-state paused">일시정지</span>
       <div class="speed" role="group" aria-label="시간 배속">
         <button type="button" data-speed="1" class="active">×1</button>
@@ -40,6 +41,30 @@
         <span class="pb-hint">스페이스바를 누르면 작전을 개시합니다</span>
       </div>
       <div id="cursor-readout" class="cursor-readout">커서를 지도 위에 올리면 지형 정보가 표시됩니다</div>
+      <div id="sight-hint" class="sight-hint">시야 표시 꺼짐 (V)</div>
+      <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+      <div id="start" class="start" hidden>
+        <div class="s-box" role="dialog" aria-labelledby="start-title">
+          <div class="s-kicker">작전 명령 · K1A2 전차 소대</div>
+          <div class="s-title" id="start-title">탐지와 식별</div>
+          <p class="s-brief">
+            적 천마호 전차 1개 소대(4대)가 북쪽 매봉 능선·새터읍에서 남하 중입니다. 소대는 주둔지를 지키며 적을 저지합니다.
+            적은 <b>보일 때만</b> 지도에 나타납니다. 처음엔 <b class="q">미상 표적 ?</b> 으로 뜨고, 몇 초 뒤 식별됩니다.
+            전방에는 피아식별장치가 없는 <b class="f">아군 보병 분대</b>와 <b class="f">보급 트럭</b>이 있습니다 — 식별 전 사격은 오인사격 위험.
+          </p>
+          <p class="s-brief">승리: 적을 모두 격파하거나, 전투력을 잃은 적이 지도 북쪽 끝 밖으로 물러나면 작전 성공.</p>
+          <div class="s-label">작전 시간</div>
+          <div class="s-opts" role="group" aria-label="주간 또는 야간">
+            <button type="button" data-light="day" aria-pressed="true">
+              <b>주간</b><span>09:00 개시 · 양쪽 모두 멀리 봄 · 적 식별도 빠른 편</span>
+            </button>
+            <button type="button" data-light="night" aria-pressed="false">
+              <b>야간</b><span>22:00 개시 · K1A2 열상장비로 식별이 더 빠름 · 천마호는 탐지·식별이 훨씬 느림</span>
+            </button>
+          </div>
+          <button type="button" class="r-btn s-go" data-go>작전 지도 열기</button>
+        </div>
+      </div>
       <div id="result" class="result" hidden>
         <div class="r-box" role="dialog" aria-labelledby="result-title">
           <div class="r-title" id="result-title">작전 성공</div>
@@ -63,8 +88,10 @@
       </section>
 
       <section class="card">
-        <h2>적 현황 · 천마호 소대</h2>
+        <h2>접촉 현황 · 전장관리체계</h2>
+        <p id="contact-summary" class="c-sum"></p>
         <ul id="enemy-roster" class="enemy-roster"></ul>
+        <p class="note">한 대가 본 표적은 소대 전체 지도에 표시됩니다. 사격은 그 표적이 직접 보이는 전차만 할 수 있습니다.</p>
       </section>
 
       <section class="card log-card">
@@ -77,9 +104,10 @@
         <dl class="keys">
           <dt>전차 클릭 / 1~4</dt><dd>전차 선택</dd>
           <dt>지도 클릭</dt><dd>선택한 전차 이동</dd>
-          <dt>적 전차 클릭</dt><dd>선택한 전차의 사격 목표 지정</dd>
+          <dt>표적 클릭</dt><dd>선택한 전차의 사격 목표 지정 (차체도 그쪽으로 돌림). 미상 표적도 지정할 수 있지만 오인사격 위험</dd>
           <dt>Q</dt><dd>탄종 전환 (K276 철갑탄 ↔ K277 고폭탄)</dd>
-          <dt>X</dt><dd>사격 목표 해제 (자유 사격)</dd>
+          <dt>X</dt><dd>사격 목표 해제 (식별된 적과 2km 안 자유 사격, 포탑만 돌림)</dd>
+          <dt>V</dt><dd>선택한 전차의 시야 표시 (어두운 곳은 안 보임)</dd>
           <dt>스페이스바</dt><dd>일시정지 / 재개</dd>
           <dt>S</dt><dd>선택한 전차 정지</dd>
           <dt>Esc / 오른쪽 클릭</dt><dd>선택 해제</dd>
@@ -87,9 +115,20 @@
       </section>
 
       <section class="card">
+        <h2>지도 기호</h2>
+        <ul class="symbols">
+          <li><span class="sym sym-unknown">?</span><span>미상 표적 — 아래 노란 막대가 식별 진행도</span></li>
+          <li><span class="sym sym-enemy"></span><span>적 (식별됨)</span></li>
+          <li><span class="sym sym-ally"></span><span>아군 보병·트럭·K2 (식별됨)</span></li>
+          <li><span class="sym sym-ghost"></span><span>흐린 점선 — 놓친 표적의 마지막 위치</span></li>
+          <li><span class="sym sym-hull"></span><span>녹색 반원 — 차체 엄폐 (포탑만 보임)</span></li>
+        </ul>
+      </section>
+
+      <section class="card">
         <h2>지형과 기동 속도</h2>
         <ul id="legend" class="legend"></ul>
-        <p class="note">하천은 다리로만 건널 수 있습니다.</p>
+        <p class="note">하천은 다리로만 건널 수 있습니다. 숲·시가지는 시선을 가리고, 그 안의 전차는 잘 안 보입니다. 능선은 너머를 가립니다.</p>
       </section>
     </aside>
   </main>
@@ -100,14 +139,18 @@
   <script src="js/map/terrain-types.js"></script>
   <script src="js/map/geography.js"></script>
   <script src="js/map/mapgen.js"></script>
+  <script src="js/map/sight.js"></script>
   <script src="js/map/pathfinding.js"></script>
   <script src="js/units/platoon.js"></script>
   <script src="js/units/movement.js"></script>
   <script src="js/combat/weapons.js"></script>
+  <script src="js/combat/sensors.js"></script>
   <script src="js/combat/ballistics.js"></script>
   <script src="js/combat/damage.js"></script>
   <script src="js/combat/gunnery.js"></script>
   <script src="js/units/enemy.js"></script>
+  <script src="js/units/allies.js"></script>
+  <script src="js/game/intel.js"></script>
   <script src="js/ai/enemy-ai.js"></script>
   <script src="js/game/battle.js"></script>
   <script src="js/game/clock.js"></script>

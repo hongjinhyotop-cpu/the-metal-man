@@ -1,27 +1,43 @@
 /*
- * 적 전차 AI (M2 간단판).
- *   advance  전진: 아군 주둔지 쪽 목표로 이동
- *   deploy   전개: 아군이 사거리에 들어오면 종대에서 횡대로 옆으로 벌려 선다 (같은 자리에 겹치지 않게)
- *   engage   교전: 정지해서 사격 (천마호는 기동 간 사격을 하지 않음)
- *   retreat  후퇴: 피해가 크면 매봉 능선 고갯길로 물러난다
- *   hold     고착: 움직일 수 없으면 그 자리에서 버틴다
+ * 적 전차 AI (M3: 시야·식별 반영).
+ * 적도 아군과 같은 시야·식별 규칙을 따른다. AI 는 '적 편 접촉 표'(game.intel.enemy)만 보고 판단하며,
+ * 아군의 실제 위치를 몰래 보지 않는다.
+ *
+ *   advance  전진: 숨은 경로의 경유지를 차례로 지난다. 집결지에서는 소대 전원이 모일 때까지(최대 STAGE_MAX_SEC) 기다린 뒤
+ *            동시에 사격 진지(숲 가장자리)로 나온다 → 주둔지를 서·동 양쪽에서 협공.
+ *   deploy   전개: 처음 교전할 때 옆으로 벌려 선다 (lane 이 있는 전차만)
+ *   engage   교전: 보이는 아군 전차(미상 포함)가 교전 거리 안이면 정지해 식별·사격.
+ *                  교전 거리는 집결 전 APPROACH_ENGAGE_M (숨어 오는 중이라 웬만하면 지나침), 집결 후 ENGAGE_M.
+ *                  LOST_SEC 동안 교전 거리 안에 아무도 안 보이면 다시 전진 (사격 진지 다음은 주둔지로 돌격).
+ *   retreat  후퇴: 크게 손상되면 매봉 능선 고갯길 집결지로
+ *   withdraw 퇴각: 소대가 전투력을 잃으면(싸울 수 있는 전차 1대 이하) 모두 지도 북쪽 끝 밖으로 빠져나간다.
+ *                  움직일 수 없는 전차는 승무원이 버리고 떠난다(유기).
+ *   hold     고착: 궤도가 끊기면 그 자리에서 사격만
  * 실제 사격은 gunnery.js 가 한다. 여기서는 이동과 정지만 정한다.
  */
 TMM.EnemyAI = (function () {
   const B = () => TMM.Ballistics;
   const D = () => TMM.Damage;
 
-  // 정지해서 사격을 시작하는 거리 (게임용 추정치). 최대 사거리(3km)보다 약간 짧게 잡아,
-  // 아군이 보이면 곧 멈춰 쏜다. 멈춰 있는 동안은 최대 사거리 안의 아군을 쏜다.
-  const ENGAGE_M = 2800;
+  // ---- 적 행동 기준 (게임용 추정치) ----
+  const ENGAGE_M = 2000; // 사격 진지에 도착한 뒤: 이 거리 안에 아군이 보이면 정지해 사격
+  const APPROACH_ENGAGE_M = 1200; // 집결 전(숨어서 이동 중): 아주 가까울 때만 멈춰 싸운다
+  const ASSAULT_ENGAGE_M = 900; // 집결 후 사격 진지로 나가는 중: 진지에 닿을 때까지 웬만하면 멈추지 않는다
+  const STAGE_MAX_SEC = 360; // 첫 전차가 집결지에 닿은 뒤 이 시간이 지나면 다 안 모여도 출발
+  const LOST_SEC = 40; // 교전 중 아군이 이 시간 동안 안 보이면 다시 전진
+  const BREAK_EFFECTIVE = 1; // 싸울 수 있는 전차가 이 수 이하가 되면 소대 퇴각
 
-  function nearestFriendM(game, e) {
-    let best = Infinity;
-    for (const u of game.units) {
-      if (u.destroyed) continue;
-      best = Math.min(best, B().distanceM(game.map, e, u));
+  // 적이 보고 있는 위협: 아군 전차, 또는 아직 식별 못 한 미상 표적(멈춰서 식별한다).
+  // 트럭·보병으로 식별된 것은 위협으로 보지 않고 전진을 계속한다. (보병은 작아서 처음부터 무시)
+  function threats(game, e) {
+    const out = [];
+    for (const c of game.intel.enemy.contacts.values()) {
+      if (!c.visible || c.wreck) continue;
+      if (c.unit.model === 'INF') continue;
+      if (c.identified && c.cls !== 'tank') continue;
+      out.push({ c, d: Math.hypot(c.lastX - e.x, c.lastY - e.y) * game.map.metersPerCell });
     }
-    return best;
+    return out;
   }
 
   // 후퇴 조건 (게임용 기준): 주포 손상, 탄약 없음, 부위 2곳 이상 손상,
@@ -30,6 +46,11 @@ TMM.EnemyAI = (function () {
     const parts = D().damagedParts(e).length;
     const lost = game.enemies.filter((x) => x.destroyed).length;
     return e.damage.gun || D().totalAmmo(e) <= 0 || parts >= 2 || (lost >= 2 && parts >= 1);
+  }
+
+  // 싸울 수 있는 전차: 살아 있고, 주포·탄약이 있고, 움직일 수 있고, 손상 부위 1곳 이하
+  function effective(e) {
+    return !e.destroyed && !e.exited && D().canFire(e) && D().canMove(e) && D().damagedParts(e).length <= 1 && e.ai.mode !== 'retreat';
   }
 
   // 횡대 전개: 진행 방향의 옆으로 lane × 5칸(250m) 이동. 갈 수 없는 곳이면 그 자리에서 교전.
@@ -46,12 +67,64 @@ TMM.EnemyAI = (function () {
     return false;
   }
 
+  // 소대 퇴각 판단과 실행
+  function checkBreak(game, events) {
+    if (game.enemyBroken) return;
+    const alive = game.enemies.filter((e) => !e.destroyed && !e.exited);
+    if (!alive.length) return;
+    if (game.enemies.filter(effective).length > BREAK_EFFECTIVE) return;
+    game.enemyBroken = true;
+    events.push({ type: 'enemy-break' });
+    for (const e of alive) {
+      if (!D().canMove(e)) {
+        // 움직일 수 없는 전차는 승무원이 버리고 떠난다
+        e.abandoned = true;
+        e.destroyed = true;
+        TMM.Movement.stop(e);
+        events.push({ type: 'enemy-abandon', unit: e });
+        continue;
+      }
+      e.ai.mode = 'withdraw';
+      e.ai.repath = 0;
+      e.targetId = null;
+    }
+  }
+
+  // 집결 완료 판단: 살아서 싸울 수 있는 전차가 모두 집결지에 왔거나, 기다린 시간이 다 됨
+  function checkGo(game, events) {
+    if (game.enemyGo) return;
+    const active = game.enemies.filter((e) => !e.destroyed && !e.exited && e.ai.mode !== 'retreat' && e.ai.mode !== 'hold');
+    const allStaged = active.length && active.every((e) => e.ai.staged || e.ai.wp > e.ai.stage);
+    const timeout = game.enemyStagedAt != null && game.gameSeconds - game.enemyStagedAt > STAGE_MAX_SEC;
+    if (allStaged || timeout) {
+      game.enemyGo = true;
+      events.push({ type: 'enemy-go' });
+    }
+  }
+
   function update(game, gdt, events) {
-    const range = ENGAGE_M;
+    checkBreak(game, events);
+    checkGo(game, events);
+    const now = game.gameSeconds;
+    const EXIT = TMM.Enemy.EXIT;
+
     for (const e of game.enemies) {
-      if (e.destroyed) continue;
+      if (e.destroyed || e.exited) continue;
       const ai = e.ai;
       ai.repath = Math.max(0, ai.repath - gdt);
+      ai.wait = Math.max(0, ai.wait - gdt);
+
+      if (ai.mode === 'withdraw') {
+        if (e.y < 1.6) {
+          e.exited = true;
+          TMM.Movement.stop(e);
+          events.push({ type: 'enemy-exit', unit: e });
+        } else if (e.state !== 'moving' && ai.repath <= 0) {
+          TMM.Movement.order(game.map, e, EXIT.x, EXIT.y);
+          ai.repath = 10;
+        }
+        continue;
+      }
 
       if (!D().canMove(e)) {
         if (ai.mode !== 'hold') {
@@ -67,8 +140,7 @@ TMM.EnemyAI = (function () {
         if (res.ok) events.push({ type: 'enemy-retreat', unit: e });
         continue;
       }
-
-      if (ai.mode === 'retreat') continue; // 집결지에 도착하면 그 자리에서 정지 (사거리에 들어오면 사격)
+      if (ai.mode === 'retreat') continue; // 집결지에 도착하면 그 자리에서 정지 (보이는 아군이 사거리에 들어오면 사격)
 
       if (ai.mode === 'deploy') {
         if (e.state === 'moving') continue;
@@ -76,9 +148,16 @@ TMM.EnemyAI = (function () {
         ai.deployed = true;
       }
 
-      const near = nearestFriendM(game, e);
+      const th = threats(game, e);
+      const atPos = ai.wp >= ai.route.length - 2 && Math.hypot(e.x - ai.route[ai.route.length - 2].x, e.y - ai.route[ai.route.length - 2].y) < 2.5;
+      if (atPos) ai.atPos = true;
+      const radius = ai.atPos ? ENGAGE_M : game.enemyGo ? ASSAULT_ENGAGE_M : APPROACH_ENGAGE_M;
+      // 멈춰 싸우는 것은 '자기 눈으로' 보이는 위협이 있을 때만 (소대가 공유한 접촉만으로는 멈추지 않고 다가간다)
+      const close = th.some((t) => t.d <= radius && TMM.Intel.sees(game, e, t.c.unit));
+      if (close) ai.lastThreatAt = now;
       const armed = D().canFire(e);
-      if (armed && near <= range) {
+
+      if (armed && close) {
         if (ai.mode !== 'engage') {
           TMM.Movement.stop(e);
           events.push({ type: 'enemy-engage', unit: e });
@@ -88,17 +167,36 @@ TMM.EnemyAI = (function () {
         continue;
       }
 
-      // 사거리 안에 아군이 없으면 다시 전진
-      if (ai.mode === 'engage') ai.mode = 'advance';
-      if (e.state !== 'moving' && ai.repath <= 0) {
-        const dGoal = Math.hypot(e.x - ai.goal.x, e.y - ai.goal.y);
-        if (dGoal > 2) TMM.Movement.order(game.map, e, ai.goal.x, ai.goal.y);
+      if (ai.mode === 'engage') {
+        if (now - ai.lastThreatAt < LOST_SEC) continue; // 방금까지 보이던 아군을 기다린다
+        ai.mode = 'advance';
+      }
+
+      // 전진: 경유지를 차례로
+      if (e.state === 'moving' || ai.wait > 0) continue;
+      const wp = ai.route[Math.min(ai.wp, ai.route.length - 1)];
+      const dWp = Math.hypot(e.x - wp.x, e.y - wp.y);
+      if (dWp <= 2) {
+        if (ai.wp === ai.stage && !game.enemyGo) {
+          // 집결지: 소대가 다 모일 때까지 대기
+          if (!ai.staged) {
+            ai.staged = true;
+            if (game.enemyStagedAt == null) game.enemyStagedAt = now;
+          }
+          continue;
+        }
+        if (ai.wp < ai.route.length - 1) ai.wp += 1;
+        continue;
+      }
+      if (ai.repath <= 0) {
+        const res = TMM.Movement.order(game.map, e, wp.x, wp.y);
         ai.repath = 20; // 경로 재탐색은 게임 20초에 한 번
+        if (!res.ok && ai.wp < ai.route.length - 1) ai.wp += 1; // 갈 수 없는 경유지는 건너뜀
       }
     }
   }
 
-  const MODE_NAMES = { advance: '전진 중', deploy: '전개 중', engage: '정지 사격', retreat: '후퇴 중', hold: '기동 불능' };
+  const MODE_NAMES = { advance: '전진 중', deploy: '전개 중', engage: '정지 사격', retreat: '후퇴 중', withdraw: '퇴각 중', hold: '기동 불능' };
 
-  return { update, MODE_NAMES };
+  return { update, MODE_NAMES, ENGAGE_M };
 })();

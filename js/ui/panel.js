@@ -1,5 +1,5 @@
 /*
- * 오른쪽 정보 패널: 선택 전차 정보(탄약·탄종·손상 포함), 소대 현황, 적 현황, 지형 범례, 상단 시계.
+ * 오른쪽 정보 패널: 선택 전차 정보(탄약·탄종·손상·엄폐 포함), 소대 현황, 접촉 현황(전장관리체계), 지형 범례, 상단 시계.
  * 매 프레임 호출되지만 글자가 바뀐 곳만 고친다.
  */
 TMM.Panel = (function () {
@@ -60,14 +60,11 @@ TMM.Panel = (function () {
       els.rows[u.id] = { btn, state: btn.querySelector('.r-state'), cond: btn.querySelector('.r-cond') };
     }
 
-    // 적 현황 목록
-    els.erows = {};
-    for (const e of game.enemies) {
-      const li = document.createElement('li');
-      li.innerHTML = '<span class="e-tag">' + e.num + '</span><span class="e-name">' + esc(e.callsign) + '</span><span class="e-state"></span>';
-      els.enemies.appendChild(li);
-      els.erows[e.id] = { li, state: li.querySelector('.e-state') };
-    }
+    els.esum = document.getElementById('contact-summary');
+    els.light = document.getElementById('light-state');
+    els.light.textContent = TMM.LIGHT[game.light].name;
+    els.light.classList.toggle('night', game.light === 'night');
+    els.sightBtn = document.getElementById('sight-hint');
 
     // 지형 범례 (속도 빠른 순)
     const order = TMM.TERRAIN_INFO.map((t, i) => i).sort((a, b) => TMM.TERRAIN_INFO[b].speed - TMM.TERRAIN_INFO[a].speed);
@@ -95,6 +92,9 @@ TMM.Panel = (function () {
     row('고도', '<span class="mono">약 ' + map.altitudeAt(u.x, u.y) + ' m</span>');
     row('현재 속도', '<span class="mono">' + Math.round(u.speedKmh) + ' km/h</span>');
     row('차체 방향', '<span class="mono">' + bearing(u.heading) + '</span>');
+    row('엄폐', coverText(game, u));
+    const ts = TMM.TERRAIN_SIGHT[map.typeAt(u.x, u.y)];
+    if (ts.conceal < 0.8) row('은폐', '<span class="ok">' + esc(info.name) + ' 안</span> <span class="sub">· 적이 탐지하기 어려움</span>');
 
     if (u.state === 'moving' && u.dest) {
       const destInfo = map.infoAt(u.dest.x, u.dest.y);
@@ -113,6 +113,18 @@ TMM.Panel = (function () {
       '<div class="u-sub">' + esc(u.model) + ' · ' + esc(u.role) + ' · ' + esc(team.name) + '</div></div>' +
       '</div>' + combat + '<dl class="kv">' + rows.join('') + '</dl>'
     );
+  }
+
+  // 차체 엄폐 문구: 보이는 적 기준
+  function coverText(game, u) {
+    if (u.destroyed) return '<span class="sub">—</span>';
+    const cv = u.cover;
+    if (!cv || !cv.list.length) return '<span class="sub">보이는 적 없음</span>';
+    if (cv.moving) return '<span class="warn">이동 중 — 노출</span>';
+    const hd = cv.list.filter((x) => x.hullDown).map((x) => TMM.Intel.displayName(x.contact));
+    if (hd.length === cv.list.length) return '<span class="ok">▲ 차체 엄폐</span> <span class="sub">· 포탑만 보임 (피탄 확률 절반)</span>';
+    if (hd.length) return '<span class="ok">▲ 차체 엄폐</span> <span class="sub">· ' + esc(hd.join(', ')) + ' 기준만</span>';
+    return '<span class="warn">노출</span> <span class="sub">· 능선 바로 뒤에 멈추면 차체 엄폐</span>';
   }
 
   // 탄약·탄종·사격·손상
@@ -148,25 +160,32 @@ TMM.Panel = (function () {
 
     // 사격 목표
     let tgt;
-    const foes = game.enemies;
-    const manual = u.targetId != null ? foes.find((e) => e.id === u.targetId) : null;
-    const engaged = u.fire.targetId != null ? foes.find((e) => e.id === u.fire.targetId) : null;
+    const I = TMM.Intel;
+    const cOf = (id) => (id != null ? I.contact(game, 'friend', id) : null);
+    const manual = cOf(u.targetId);
+    const engaged = cOf(u.fire.targetId);
+    const distTo = (c) => Math.hypot(c.lastX - u.x, c.lastY - u.y) * game.map.metersPerCell;
     if (manual) {
-      const d = TMM.Ballistics.distanceM(game.map, u, manual);
+      const d = distTo(manual);
       const inR = d <= ammo.rangeM;
-      tgt = '<b>' + esc(manual.callsign) + '</b> <span class="sub">· 지정 · ' + (d / 1000).toFixed(1) + 'km' + (inR ? '' : ' · 사거리 밖') + '</span>';
-      if (!inR && engaged) tgt += '<br><span class="sub">대신 ' + esc(engaged.callsign) + ' 자동 교전</span>';
+      tgt = '<b>' + esc(I.displayName(manual)) + '</b> <span class="sub">· 지정 · ' + (d / 1000).toFixed(1) + 'km' + (inR ? '' : ' · 사거리 밖') + (manual.visible ? '' : ' · 표적 소실') + '</span>';
+      if (!manual.identified) tgt += '<br><span class="warn">⚠ 미식별 표적 — 오인사격 위험</span>';
+      if (engaged && engaged !== manual) tgt += '<br><span class="sub">대신 ' + esc(I.displayName(engaged)) + ' 자동 교전</span>';
     } else if (engaged) {
-      const d = TMM.Ballistics.distanceM(game.map, u, engaged);
-      tgt = esc(engaged.callsign) + ' <span class="sub">· 자동 교전 · ' + (d / 1000).toFixed(1) + 'km</span>';
+      tgt = esc(I.displayName(engaged)) + ' <span class="sub">· 자동 교전 · ' + (distTo(engaged) / 1000).toFixed(1) + 'km</span>';
     } else {
-      tgt = '<span class="sub">없음 · 자유 사격</span>';
+      tgt = '<span class="sub">없음 · 식별된 적과 자유 사격 (2km 안)</span>';
     }
     out.push('<div class="cb-row"><span class="cb-k">사격 목표</span><span>' + tgt + '</span></div>');
     if (engaged && !u.destroyed) {
-      const p = TMM.Ballistics.hitChance(game.map, u, engaged, u.ammoType);
-      const asp = TMM.Ballistics.ASPECT_NAMES[TMM.Ballistics.aspect(engaged, u)];
-      out.push('<div class="cb-row"><span class="cb-k">명중 예상</span><span class="mono">' + Math.round(p * 100) + '% <span class="sub">· 적 ' + asp + ' 조준</span></span></div>');
+      const t = engaged.unit;
+      const mods = I.fireMods(game, u, t);
+      const p = TMM.Ballistics.hitChance(game.map, u, t, u.ammoType, mods);
+      const asp = TMM.Ballistics.ASPECT_NAMES[TMM.Ballistics.aspect(t, u)];
+      const notes = [];
+      if (mods.hullDown) notes.push('표적 차체 엄폐');
+      if (mods.obs > 0.15) notes.push('가림 ' + Math.round(Math.min(1, mods.obs) * 100) + '%');
+      out.push('<div class="cb-row"><span class="cb-k">명중 예상</span><span class="mono">' + Math.round(p * 100) + '% <span class="sub">· 적 ' + asp + ' 조준' + (notes.length ? ' · ' + notes.join(' · ') : '') + '</span></span></div>');
     }
     out.push('<div class="cb-row"><span class="cb-k">사격</span><span>' + esc(TMM.Gunnery.status(game, u)) + '</span></div>');
 
@@ -178,6 +197,54 @@ TMM.Panel = (function () {
     }
     out.push('</div></div>');
     return out.join('');
+  }
+
+  const hullCache = { key: '', v: false };
+
+  // 접촉 한 줄 설명 (HTML)
+  function contactLine(game, c) {
+    const name = TMM.Intel.displayName(c);
+    const age = Math.max(0, Math.round(game.gameSeconds - c.lastSeen));
+    let st;
+    if (c.wreck) st = c.unit.abandoned ? '유기됨' : TMM.Damage.summary(c.unit);
+    else if (c.visible) {
+      st = '보임 · ' + (c.dist / 1000).toFixed(1) + 'km';
+      if (!c.identified) st += ' · 식별 중 ' + Math.round(c.idProg * 100) + '%';
+      else if (c.kind === 'hostile' && c.unit.ai) {
+        st += ' · ' + (TMM.EnemyAI.MODE_NAMES[c.unit.ai.mode] || '');
+        const dmg = TMM.Damage.damagedParts(c.unit);
+        if (dmg.length) st += ' · ' + dmg.map((k) => TMM.PARTS[k].name).join('·') + ' 손상';
+      } else if (c.unit.hurt) st += ' · ' + TMM.Damage.summary(c.unit);
+    } else st = '놓침 · 마지막 위치 ' + age + '초 전';
+    return name + ' — ' + st;
+  }
+
+  // 접촉 현황 (전장관리체계): 소대가 알고 있는 표적 목록
+  function updateContacts(game) {
+    const list = Array.from(game.intel.friend.contacts.values());
+    const rank = (c) => (c.wreck ? 4 : c.kind === 'friendly' ? 3 : !c.identified ? 0 : c.visible ? 1 : 2);
+    list.sort((a, b) => rank(a) - rank(b) || a.firstSeen - b.firstSeen);
+    let html = '';
+    for (const c of list) {
+      const cls = c.wreck ? 'k-dead' : !c.identified ? 'k-unknown' : c.kind === 'friendly' ? 'k-friend' : 'k-enemy';
+      const tag = !c.identified ? c.label : c.kind === 'friendly' ? '아' : c.unit.num || '적';
+      const line = contactLine(game, c);
+      const i = line.indexOf(' — ');
+      html += '<li class="' + cls + (c.visible ? '' : ' lost') + '"><span class="e-tag">' + esc(String(tag)) + '</span>' +
+        '<span class="e-name">' + esc(line.slice(0, i)) + '</span><span class="e-state">' + esc(line.slice(i + 3)) + '</span></li>';
+    }
+    if (!list.length) html = '<li class="none">아직 탐지한 표적 없음</li>';
+    set(els.enemies, 'contacts', html, true);
+
+    const kills = game.enemies.filter((e) => e.destroyed && !e.abandoned).length;
+    const aband = game.enemies.filter((e) => e.abandoned).length;
+    const gone = game.enemies.filter((e) => e.exited).length;
+    const seen = game.enemies.filter((e) => { const c = TMM.Intel.contact(game, 'friend', e.id); return c && c.identified; }).length;
+    let sum = '적 전차 식별 ' + seen + ' / ' + game.enemies.length + ' · 격파 ' + kills;
+    if (aband) sum += ' · 유기 ' + aband;
+    if (gone) sum += ' · 이탈 ' + gone;
+    if (game.ffCount) sum += ' · 오인사격 ' + game.ffCount + '회';
+    set(els.esum, 'esum', sum);
   }
 
   function update(game) {
@@ -205,25 +272,11 @@ TMM.Panel = (function () {
       }
     }
 
-    for (const e of game.enemies) {
-      const r = els.erows[e.id];
-      let txt;
-      if (e.destroyed) txt = '격파';
-      else {
-        txt = TMM.EnemyAI.MODE_NAMES[e.ai.mode] || '';
-        const dmg = TMM.Damage.damagedParts(e);
-        if (dmg.length) txt += ' · ' + dmg.map((k) => TMM.PARTS[k].name).join('·') + ' 손상';
-      }
-      set(r.state, 'es' + e.id, txt);
-      if (cache.get('edead' + e.id) !== e.destroyed) {
-        cache.set('edead' + e.id, e.destroyed);
-        r.li.classList.toggle('dead', e.destroyed);
-      }
-    }
+    updateContacts(game);
 
     set(els.time, 'time', TMM.Clock.format(game.gameSeconds));
     set(els.remain, 'remain', TMM.Clock.remaining(game.gameSeconds));
-    const runKey = (game.over ? 'o' : game.paused ? 'p' : 'r' + game.speedMult) + (game.combat ? 'c' : '');
+    const runKey = (game.over ? 'o' : game.paused ? 'p' : 'r' + game.speedMult) + (game.combat ? 'c' : '') + (game.started ? 's' : '');
     if (cache.get('run') !== runKey) {
       cache.set('run', runKey);
       els.run.textContent = game.over ? '작전 종료' : game.paused ? '일시정지' : (game.combat ? '교전 중' : '진행 중') + ' ×' + game.speedMult;
@@ -240,24 +293,44 @@ TMM.Panel = (function () {
       });
     }
 
+    const sightKey = game.showSight ? 'on' : 'off';
+    if (cache.get('sight') !== sightKey) {
+      cache.set('sight', sightKey);
+      els.sightBtn.textContent = game.showSight ? '시야 표시 켜짐 (V)' : '시야 표시 꺼짐 (V)';
+      els.sightBtn.classList.toggle('on', game.showSight);
+    }
+
     // 커서 아래 지형
     const h = game.hover;
     let txt = '커서를 지도 위에 올리면 지형 정보가 표시됩니다';
-    const foe = game.hoverEnemyId != null ? game.enemies.find((e) => e.id === game.hoverEnemyId) : null;
-    if (foe) {
-      txt = foe.callsign + ' · 천마호 · ' + TMM.Damage.summary(foe);
+    const c = game.hoverContactId != null ? TMM.Intel.contact(game, 'friend', game.hoverContactId) : null;
+    if (c) {
+      txt = contactLine(game, c).replace(/<[^>]+>/g, '');
       const sel = game.units.find((u) => u.id === game.selectedId);
-      if (sel && !foe.destroyed && !sel.destroyed) {
-        const d = TMM.Ballistics.distanceM(game.map, sel, foe);
+      if (sel && !c.wreck && !sel.destroyed && c.kind !== 'friendly') {
+        const d = Math.hypot(c.lastX - sel.x, c.lastY - sel.y) * game.map.metersPerCell;
         const inR = d <= TMM.AMMO[sel.ammoType].rangeM;
-        txt += ' · ' + sel.callsign + '에서 ' + (d / 1000).toFixed(1) + 'km' +
-          (inR ? ' · 명중 예상 ' + Math.round(TMM.Ballistics.hitChance(game.map, sel, foe, sel.ammoType) * 100) + '% · 클릭하면 사격 목표' : ' · 사거리 밖');
+        const sees = c.visible && TMM.Intel.sees(game, sel, c.unit);
+        txt += ' · ' + sel.callsign + '에서 ' + (d / 1000).toFixed(1) + 'km';
+        if (!sees) txt += ' · 본 차에서 안 보임';
+        else if (!inR) txt += ' · 사거리 밖';
+        else txt += ' · 명중 예상 ' + Math.round(TMM.Ballistics.hitChance(game.map, sel, c.unit, sel.ammoType, TMM.Intel.fireMods(game, sel, c.unit)) * 100) + '%';
+        txt += c.identified ? ' · 클릭하면 사격 목표' : ' · ⚠ 미식별 — 클릭하면 오인사격 위험을 안고 사격';
       }
     } else if (h) {
       const info = game.map.infoAt(h.x, h.y);
       if (info) {
         txt = '격자 ' + game.map.gridRef(h.x, h.y) + ' · ' + info.name + ' · ' +
           (info.speed ? info.speed + ' km/h (' + TMM.speedGrade(info.speed) + ')' : '통행 불가');
+        // 커서 지점의 엄폐 안내 (칸이 바뀔 때만 계산)
+        const key = Math.floor(h.x) + ',' + Math.floor(h.y);
+        if (hullCache.key !== key) {
+          hullCache.key = key;
+          hullCache.v = info.speed ? TMM.Sight.hullDownFromNorth(game.map, h) : false;
+        }
+        if (hullCache.v) txt += ' · ▲ 북쪽에서 볼 때 차체 엄폐 지형';
+        const ts = TMM.TERRAIN_SIGHT[game.map.typeAt(h.x, h.y)];
+        if (ts.conceal < 0.8) txt += ' · 은폐 (탐지 어려움)';
       }
     }
     set(els.cursor, 'cursor', txt);

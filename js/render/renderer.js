@@ -1,6 +1,10 @@
 /*
- * 매 프레임 그리기: 지형 레이어 + 이동 경로 + 사격선 + 전차 기호(아군·적) + 사격 효과 + 커서 표시.
+ * 매 프레임 그리기: 지형 레이어 + (야간 어둠) + (시야 표시) + 이동 경로 + 사격선 + 전차 기호 + 접촉 기호 + 사격 효과 + 커서 표시.
  * view: 지도 칸 좌표 ↔ 화면 픽셀 변환 정보.
+ *
+ * M3: 적과 비지휘 아군(보병·트럭·K2)은 실제 위치가 아니라 '아군 편 접촉 표'(game.intel.friend)로만 그린다.
+ *   보이는 접촉: 지금 위치 / 놓친 접촉: 마지막 위치를 흐리게 / 격파 확인: 잔해 위치.
+ *   미상 표적은 노란 '?' 기호, 적으로 식별되면 붉은 마름모, 아군으로 식별되면 푸른 사각형.
  */
 TMM.Renderer = (function () {
   const FONT_MONO = '"IBM Plex Mono", ui-monospace, monospace';
@@ -128,6 +132,14 @@ TMM.Renderer = (function () {
       ctx.lineTo(-W / 2, -H / 2 - (unit.role === '소대장차' ? 10 : 6));
       ctx.stroke();
     }
+    if (unit.hullDown && !unit.destroyed) {
+      // 차체 엄폐: 기호 아래에 둔덕 모양 (녹색 반원)
+      ctx.strokeStyle = '#9cc46a';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, H / 2 + 12, W / 2 + 2, Math.PI * 1.15, Math.PI * 1.85);
+      ctx.stroke();
+    }
     drawDamageMarks(ctx, unit, W, H);
     ctx.restore();
   }
@@ -159,14 +171,20 @@ TMM.Renderer = (function () {
   }
 
   // 적 전차 기호: 적대 부대 기호(마름모) + 기갑 타원 + 번호
-  function drawEnemy(ctx, view, e, hovered, targeted) {
-    const p = view.toScreen(e.x, e.y);
+  // pos: 그릴 위치 (접촉의 현재/마지막 위치), ghost: 놓친 접촉(흐리게, 점선)
+  function drawEnemy(ctx, view, e, hovered, targeted, pos, ghost) {
+    const p = view.toScreen(pos ? pos.x : e.x, pos ? pos.y : e.y);
     const R = 13;
-    const color = e.destroyed ? DEAD_TEAM.color : ENEMY_COLOR;
+    const dead = e.destroyed;
+    const color = dead ? DEAD_TEAM.color : ENEMY_COLOR;
     ctx.save();
     ctx.translate(Math.round(p.x), Math.round(p.y));
+    if (ghost) {
+      ctx.globalAlpha = ghost;
+      ctx.setLineDash([3, 3]);
+    }
 
-    if (!e.destroyed) {
+    if (!dead && !ghost) {
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -176,7 +194,7 @@ TMM.Renderer = (function () {
       ctx.stroke();
     }
 
-    ctx.fillStyle = e.destroyed ? 'rgba(30, 28, 24, 0.85)' : 'rgba(40, 12, 8, 0.88)';
+    ctx.fillStyle = dead ? 'rgba(30, 28, 24, 0.85)' : ghost ? 'rgba(40, 12, 8, 0.4)' : 'rgba(40, 12, 8, 0.88)';
     ctx.beginPath();
     ctx.moveTo(0, -R); ctx.lineTo(R, 0); ctx.lineTo(0, R); ctx.lineTo(-R, 0);
     ctx.closePath();
@@ -197,32 +215,187 @@ TMM.Renderer = (function () {
     ctx.textBaseline = 'middle';
     ctx.fillText(String(e.num), R + 4.5, -R + 5.8);
 
-    if (targeted || hovered) {
-      ctx.strokeStyle = targeted ? 'rgba(255, 120, 90, 0.95)' : 'rgba(245, 235, 190, 0.8)';
-      ctx.lineWidth = 1.5;
+    ctx.setLineDash([]);
+    drawReticle(ctx, R, hovered, targeted);
+    if (!ghost) drawDamageMarks(ctx, e, 20, 20);
+    if (e.abandoned) {
+      ctx.fillStyle = DEAD_TEAM.color;
+      ctx.font = '600 10px ' + FONT_MONO;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText('유기', 0, R + 3);
+    }
+    ctx.restore();
+  }
+
+  // 조준 표시 (커서가 올라감 / 사격 목표)
+  function drawReticle(ctx, R, hovered, targeted) {
+    if (!targeted && !hovered) return;
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([]);
+    ctx.strokeStyle = targeted ? 'rgba(255, 120, 90, 0.95)' : 'rgba(245, 235, 190, 0.8)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, R + 6, 0, Math.PI * 2);
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      ctx.moveTo(dx * (R + 3), dy * (R + 3));
+      ctx.lineTo(dx * (R + 10), dy * (R + 10));
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  const UNKNOWN_COLOR = '#e8cf4a';
+  const ALLY_COLOR = '#7fb6e8';
+
+  // 미상 표적: 노란 사엽 기호(미상 부대 기호) + '?' + 꼬리표 글자 + 식별 진행 막대
+  function drawUnknown(ctx, view, c, pos, hovered, targeted, ghost) {
+    const p = view.toScreen(pos.x, pos.y);
+    const R = 12;
+    ctx.save();
+    ctx.translate(Math.round(p.x), Math.round(p.y));
+    if (ghost) {
+      ctx.globalAlpha = ghost;
+      ctx.setLineDash([3, 3]);
+    }
+    ctx.fillStyle = ghost ? 'rgba(40, 36, 10, 0.4)' : 'rgba(40, 36, 10, 0.88)';
+    ctx.strokeStyle = UNKNOWN_COLOR;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    const r = R * 0.55;
+    for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) ctx.moveTo(dx * r + r, dy * r), ctx.arc(dx * r, dy * r, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) {
+      ctx.moveTo(dx * r + r, dy * r);
+      ctx.arc(dx * r, dy * r, r, 0, Math.PI * 2);
+    }
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(40, 36, 10, 0.95)';
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.setLineDash([]);
+    ctx.fillStyle = UNKNOWN_COLOR;
+    ctx.font = '700 12px ' + FONT_MONO;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('?', 0, 0.5);
+    // 꼬리표
+    ctx.fillRect(R - 1, -R - 3, 13, 13);
+    ctx.fillStyle = '#1a1604';
+    ctx.font = '700 10px ' + FONT_MONO;
+    ctx.fillText(c.label, R + 5.5, -R + 3.6);
+    // 식별 진행 막대
+    if (!ghost && c.idProg > 0) {
+      ctx.fillStyle = 'rgba(20, 18, 6, 0.85)';
+      ctx.fillRect(-R, R + 4, R * 2, 4);
+      ctx.fillStyle = UNKNOWN_COLOR;
+      ctx.fillRect(-R, R + 4, R * 2 * c.idProg, 4);
+    }
+    drawReticle(ctx, R, hovered, targeted);
+    ctx.restore();
+  }
+
+  // 아군으로 식별된 비지휘 부대: 푸른 사각형 + 병과 기호 (보병 X, 트럭 바퀴, 전차 타원)
+  function drawAlly(ctx, view, c, pos, hovered, ghost) {
+    const u = c.unit;
+    const p = view.toScreen(pos.x, pos.y);
+    const W = 22, H = 15;
+    const dead = u.destroyed;
+    const color = dead ? DEAD_TEAM.color : ALLY_COLOR;
+    ctx.save();
+    ctx.translate(Math.round(p.x), Math.round(p.y));
+    if (ghost) {
+      ctx.globalAlpha = ghost;
+      ctx.setLineDash([3, 3]);
+    }
+    ctx.fillStyle = 'rgba(10, 20, 30, 0.85)';
+    ctx.fillRect(-W / 2, -H / 2, W, H);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(-W / 2, -H / 2, W, H);
+    ctx.setLineDash([]);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    if (c.cls === 'infantry') {
+      ctx.moveTo(-W / 2, -H / 2); ctx.lineTo(W / 2, H / 2);
+      ctx.moveTo(W / 2, -H / 2); ctx.lineTo(-W / 2, H / 2);
+    } else if (c.cls === 'truck') {
+      ctx.moveTo(-W / 2 + 3, 0); ctx.lineTo(W / 2 - 3, 0);
+      ctx.moveTo(-3, 4); ctx.arc(-5, 4, 2, 0, Math.PI * 2);
+      ctx.moveTo(7, 4); ctx.arc(5, 4, 2, 0, Math.PI * 2);
+    } else {
+      ctx.ellipse(0, 0, W / 2 - 4, H / 2 - 4, 0, 0, Math.PI * 2);
+    }
+    ctx.stroke();
+    // 꼬리표
+    const tag = c.cls === 'infantry' ? '보' : c.cls === 'truck' ? '트' : 'K2';
+    ctx.font = '700 10px ' + FONT_MONO;
+    const tw = Math.max(13, ctx.measureText(tag).width + 5);
+    ctx.fillStyle = color;
+    ctx.fillRect(W / 2 - 1, -H / 2 - 9, tw, 13);
+    ctx.fillStyle = '#081420';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(tag, W / 2 - 1 + tw / 2, -H / 2 - 2.4);
+    if (dead || u.hurt) {
+      ctx.strokeStyle = '#e8573f';
+      ctx.lineWidth = dead ? 3 : 2;
       ctx.beginPath();
-      ctx.arc(0, 0, R + 6, 0, Math.PI * 2);
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        ctx.moveTo(dx * (R + 3), dy * (R + 3));
-        ctx.lineTo(dx * (R + 10), dy * (R + 10));
+      if (dead) {
+        ctx.moveTo(-W / 2 - 2, -H / 2 - 2); ctx.lineTo(W / 2 + 2, H / 2 + 2);
+        ctx.moveTo(W / 2 + 2, -H / 2 - 2); ctx.lineTo(-W / 2 - 2, H / 2 + 2);
+      } else {
+        ctx.moveTo(-W / 2, H / 2 + 4); ctx.lineTo(W / 2, H / 2 + 4);
       }
       ctx.stroke();
     }
-    drawDamageMarks(ctx, e, 20, 20);
+    drawReticle(ctx, 11, hovered, false);
     ctx.restore();
+  }
+
+  // 아군 편이 아는 접촉 하나를 그린다
+  function drawContact(ctx, view, game, c, sel) {
+    const now = game.gameSeconds;
+    const pos = c.visible ? { x: c.unit.x, y: c.unit.y } : { x: c.lastX, y: c.lastY };
+    let ghost = 0;
+    if (!c.visible && !c.wreck) {
+      const age = now - c.lastSeen;
+      ghost = Math.max(0.15, 0.55 * (1 - age / TMM.VISION.MEMORY_SEC));
+    }
+    const hovered = c.id === game.hoverContactId;
+    const targeted = !!sel && sel.targetId === c.id;
+    if (!c.identified) drawUnknown(ctx, view, c, pos, hovered, targeted, ghost);
+    else if (c.kind === 'friendly') drawAlly(ctx, view, c, pos, hovered, ghost);
+    else drawEnemy(ctx, view, c.unit, hovered, targeted, pos, ghost);
+  }
+
+  // 지도에 그려지는 접촉 목록 (클릭 판정용): [{ id, x, y, contact }]
+  function contactMarks(game) {
+    const out = [];
+    for (const c of game.intel.friend.contacts.values()) {
+      const x = c.visible ? c.unit.x : c.lastX, y = c.visible ? c.unit.y : c.lastY;
+      out.push({ id: c.id, x, y, contact: c, destroyed: c.wreck });
+    }
+    return out;
   }
 
   // 선택 전차의 사격선: 지정 목표는 실선, 자동 교전은 점선
   function drawFireLine(ctx, view, game, unit) {
     if (!unit || unit.destroyed) return;
     const tid = unit.fire.targetId != null ? unit.fire.targetId : unit.targetId;
-    const t = game.enemies.find((e) => e.id === tid && !e.destroyed);
-    if (!t) return;
-    const a = view.toScreen(unit.x, unit.y), b = view.toScreen(t.x, t.y);
+    if (tid == null) return;
+    const c = TMM.Intel.contact(game, 'friend', tid);
+    if (!c || c.wreck) return;
+    const tx = c.visible ? c.unit.x : c.lastX, ty = c.visible ? c.unit.y : c.lastY;
+    const a = view.toScreen(unit.x, unit.y), b = view.toScreen(tx, ty);
     ctx.save();
     ctx.strokeStyle = 'rgba(255, 120, 90, 0.75)';
     ctx.lineWidth = 1.5;
-    if (unit.targetId !== t.id) ctx.setLineDash([3, 5]);
+    if (unit.targetId !== tid || !c.visible) ctx.setLineDash([3, 5]);
+    if (!c.identified) ctx.strokeStyle = 'rgba(232, 207, 74, 0.85)'; // 미식별 표적 사격: 노란 선
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(b.x, b.y);
@@ -291,7 +464,7 @@ TMM.Renderer = (function () {
 
   function drawCursor(ctx, view, game) {
     const h = game.hover;
-    if (!h || !game.selectedId || game.hoverEnemyId != null) return;
+    if (!h || !game.selectedId || game.hoverContactId != null) return;
     const info = game.map.infoAt(h.x, h.y);
     if (!info) return;
     const p = view.toScreen(h.x, h.y);
@@ -324,6 +497,12 @@ TMM.Renderer = (function () {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(terrain, view.ox, view.oy, map.cols * view.scale, map.rows * view.scale);
+
+    // 야간: 지도를 어둡게
+    if (game.light === 'night') {
+      ctx.fillStyle = 'rgba(4, 10, 26, 0.5)';
+      ctx.fillRect(view.ox, view.oy, map.cols * view.scale, map.rows * view.scale);
+    }
 
     // 지도 테두리
     ctx.strokeStyle = 'rgba(200, 200, 150, 0.35)';
@@ -359,16 +538,58 @@ TMM.Renderer = (function () {
     ctx.fillText('1 km', sx + px1km + 6, sy + 3);
 
     const sel = game.units.find((u) => u.id === game.selectedId);
+    if (sel && game.showSight && !sel.destroyed) drawSight(ctx, view, game, sel);
     drawRange(ctx, view, game, sel);
     for (const u of game.units) drawPath(ctx, view, u, u.id === game.selectedId);
     drawFireLine(ctx, view, game, sel);
-    for (const e of game.enemies) if (e.destroyed) drawEnemy(ctx, view, e, e.id === game.hoverEnemyId, false);
+    const contacts = Array.from(game.intel.friend.contacts.values());
+    // 잔해 → 마지막 위치 → 보이는 접촉 순서로 (보이는 것이 위에)
+    for (const c of contacts) if (c.wreck) drawContact(ctx, view, game, c, sel);
     for (const u of game.units) if (u.destroyed && u.id !== game.selectedId) drawUnit(ctx, view, u, false, time);
-    for (const e of game.enemies) if (!e.destroyed) drawEnemy(ctx, view, e, e.id === game.hoverEnemyId, !!sel && sel.targetId === e.id);
+    for (const c of contacts) if (!c.wreck && !c.visible) drawContact(ctx, view, game, c, sel);
+    for (const c of contacts) if (!c.wreck && c.visible) drawContact(ctx, view, game, c, sel);
     for (const u of game.units) if (!u.destroyed && u.id !== game.selectedId) drawUnit(ctx, view, u, false, time);
     if (sel) drawUnit(ctx, view, sel, true, time);
     drawFx(ctx, view, game, time);
     drawCursor(ctx, view, game);
+  }
+
+  // 선택 전차의 시야 표시: 안 보이는 곳을 어둡게, 부분적으로 보이는 곳(숲 사이)은 옅게
+  const sightCache = { key: '', canvas: null };
+  function drawSight(ctx, view, game, u) {
+    const sens = TMM.SENSORS[u.model][game.light];
+    const maxCells = (sens.detect * TMM.VISION.MOVING_MUL) / game.map.metersPerCell;
+    const key = u.id + ':' + Math.round(u.x * 2) + ':' + Math.round(u.y * 2) + ':' + game.light;
+    if (sightCache.key !== key) {
+      const vs = TMM.Sight.viewshed(game.map, u, maxCells, 2);
+      const cv = sightCache.canvas || document.createElement('canvas');
+      cv.width = vs.w;
+      cv.height = vs.h;
+      const c2 = cv.getContext('2d');
+      const img = c2.createImageData(vs.w, vs.h);
+      for (let i = 0; i < vs.data.length; i++) {
+        const v = vs.data[i];
+        img.data[i * 4] = 6;
+        img.data[i * 4 + 1] = 8;
+        img.data[i * 4 + 2] = 4;
+        img.data[i * 4 + 3] = v === 2 ? 0 : v === 1 ? 70 : 150;
+      }
+      c2.putImageData(img, 0, 0);
+      sightCache.key = key;
+      sightCache.canvas = cv;
+    }
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(sightCache.canvas, view.ox, view.oy, game.map.cols * view.scale, game.map.rows * view.scale);
+    // 탐지 거리 원
+    const p = view.toScreen(u.x, u.y);
+    ctx.strokeStyle = 'rgba(156, 196, 106, 0.35)';
+    ctx.setLineDash([6, 6]);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, (sens.detect / game.map.metersPerCell) * view.scale, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
 
   // 화면 좌표에서 가장 가까운 전차 (반경 안)
@@ -382,5 +603,5 @@ TMM.Renderer = (function () {
     return best;
   }
 
-  return { createView, fit, drawFrame, hitUnit };
+  return { createView, fit, drawFrame, hitUnit, contactMarks };
 })();
