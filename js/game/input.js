@@ -1,5 +1,7 @@
 /*
- * 마우스·키보드 입력 (M4: 무전 지휘).
+ * 마우스·키보드 입력 (M4: 무전 지휘, M7.5: 마우스만으로 다 되게).
+ *   M7.5 오른쪽 클릭: 상황에 맞는 메뉴 (땅 → 이동·엄호·철수 / 적 → 목표 지정 / 내 전차 → 정지·보고). 고른 명령이 있으면 그 명령 취소.
+ *        상단 상태 단추 = 일시정지/재개, 지도 왼쪽 위 [시야 표시], 조준 화면의 [◂ 지도로]. F1·? 조작 요약 카드(layout.js).
  *   전차 클릭 / 1~4: 전차 선택 (받는 대상도 그 전차로) · 5 1조 · 6 2조 · 7 소대 전체
  *   지도 클릭: 고른 명령의 위치 지정. 명령을 고르지 않았으면 지휘 전차(1호차)만 이동.
  *   표적 클릭: 받는 대상에게 목표 지정 (1호차는 바로, 2·3·4호차는 무전)
@@ -23,6 +25,7 @@ TMM.Input = (function () {
       const overUnit = TMM.Renderer.hitUnit(view, game.units, p.x, p.y);
       const overMark = overUnit ? null : TMM.Renderer.hitUnit(view, TMM.Renderer.contactMarks(game), p.x, p.y);
       game.hoverContactId = overMark ? overMark.id : null;
+      game.hoverUnitId = overUnit ? overUnit.id : null;
       let cursor = 'default';
       const mode = game.cmd.mode;
       if (overUnit) cursor = 'pointer';
@@ -40,9 +43,11 @@ TMM.Input = (function () {
     canvas.addEventListener('mouseleave', () => {
       game.hover = null;
       game.hoverContactId = null;
+      game.hoverUnitId = null;
     });
 
     canvas.addEventListener('click', (ev) => {
+      if (TMM.ContextMenu.justClosed()) return; // 메뉴를 닫으려고 누른 클릭
       const p = local(ev);
       const hit = TMM.Renderer.hitUnit(view, game.units, p.x, p.y);
       if (hit) {
@@ -59,11 +64,25 @@ TMM.Input = (function () {
       actions.mapClick(m.x, m.y);
     });
 
-    // 오른쪽 클릭: 고른 명령 취소, 없으면 선택 해제
+    // M7.5 오른쪽 클릭: 고른 명령이 있으면 취소, 없으면 그 자리의 명령 메뉴
     canvas.addEventListener('contextmenu', (ev) => {
       ev.preventDefault();
-      actions.cancel();
+      if (game.cmd.mode) return actions.cancel();
+      const p = local(ev);
+      const hit = TMM.Renderer.hitUnit(view, game.units, p.x, p.y);
+      const mark = hit ? null : TMM.Renderer.hitUnit(view, TMM.Renderer.contactMarks(game), p.x, p.y);
+      const m = view.toMap(p.x, p.y);
+      if (!hit && !mark && game.map.typeAt(m.x, m.y) < 0) return;
+      actions.openMenu({ unitId: hit ? hit.id : null, contactId: mark ? mark.id : null, x: m.x, y: m.y }, p.x, p.y);
     });
+
+    // 화면의 단추들: 상태(일시정지/재개) · 시야 표시 · 조준 화면 닫기
+    const runBtn = document.getElementById('run-state');
+    if (runBtn) runBtn.addEventListener('click', () => actions.togglePause());
+    const sightBtn = document.getElementById('sight-hint');
+    if (sightBtn) sightBtn.addEventListener('click', () => actions.toggleSight());
+    const exitBtn = document.getElementById('scope-exit');
+    if (exitBtn) exitBtn.addEventListener('click', () => actions.toggleScope());
 
     // ---- M6 조준 화면 마우스 ----
     if (scopeCanvas) {
@@ -127,6 +146,12 @@ TMM.Input = (function () {
 
     window.addEventListener('keydown', (ev) => {
       if (ev.target && (ev.target.tagName === 'INPUT' || ev.target.tagName === 'TEXTAREA')) return;
+      if (TMM.Layout.helpOpen()) { if (ev.code === 'Space' || ev.code === 'Tab') ev.preventDefault(); return; } // 조작 요약 카드가 떠 있음
+      // M7.5: 우클릭 메뉴가 떠 있으면 Esc 닫기, 항목의 단축키로 그 항목 실행
+      if (!ev.ctrlKey && !ev.metaKey && !ev.altKey && TMM.ContextMenu.handleKey(ev)) {
+        ev.preventDefault();
+        return;
+      }
       if (ev.code === 'Tab') {
         // M6: 지도 ↔ 조준 화면
         ev.preventDefault();

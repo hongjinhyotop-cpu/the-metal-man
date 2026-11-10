@@ -24,7 +24,7 @@
     </div>
     <div class="controls">
       <span id="light-state" class="light-state">주간</span>
-      <span id="run-state" class="run-state paused">일시정지</span>
+      <button type="button" id="run-state" class="run-state paused" title="일시정지 / 재개 (스페이스바)">▶ 작전 개시</button>
       <div class="speed" role="group" aria-label="시간 배속">
         <button type="button" data-speed="1" class="active">×1</button>
         <button type="button" data-speed="2">×2</button>
@@ -41,27 +41,37 @@
         <span class="pb-title">작전 대기</span>
         <span class="pb-hint">스페이스바를 누르면 작전을 개시합니다</span>
       </div>
-      <div id="cursor-readout" class="cursor-readout">커서를 지도 위에 올리면 지형 정보가 표시됩니다</div>
-      <div id="sight-hint" class="sight-hint">시야 표시 꺼짐 (V)</div>
+      <div class="guide-strip">
+        <div id="guide" class="guide" aria-live="polite">전차를 고르십시오</div>
+        <div id="cursor-readout" class="cursor-readout"></div>
+      </div>
+      <button type="button" id="sight-hint" class="sight-hint" title="선택한 전차에서 보이는 곳과 안 보이는 곳 (V)">시야 표시 꺼짐 <kbd>V</kbd></button>
+      <button type="button" id="scope-exit" class="scope-exit" hidden title="조준 화면을 닫고 지도로 (Tab)">◀ 지도로 <kbd>Tab</kbd></button>
+      <div id="ctx-menu" class="ctx-menu" role="menu" hidden></div>
+      <div id="tut" class="tut" hidden></div>
       <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
       <div id="op-hud" class="op-hud" hidden></div>
       <div id="start" class="start" hidden>
         <div class="s-box" role="dialog" aria-labelledby="start-title">
-          <div class="s-kicker">훈련 모드 · 단일 전투 (캠페인과 상관없음)</div>
-          <div class="s-title" id="start-title">무전 지휘</div>
+          <div class="s-kicker">훈련 모드 · 캠페인과 상관없음</div>
+          <div class="s-title" id="start-title">훈련 모드</div>
+          <button type="button" class="c-big s-basic" data-basic>
+            <b>기초 훈련</b><span>처음이라면 여기부터 · 짧은 3단계로 조작 익히기 (이동 → 무전 명령 → 목표 지정), 약 3분</span>
+          </button>
+          <div class="s-label">실전 훈련 · 단일 전투</div>
           <p class="s-brief">
             적 천마호 전차 1개 소대(4대)가 북쪽 매봉 능선·새터읍에서 남하 중입니다. 소대(호출부호 <b>강철</b>)는 주둔지를 지키며 적을 저지합니다.
             적은 <b>보일 때만</b> 지도에 나타납니다. 처음엔 <b class="q">미상 표적 ?</b> 으로 뜨고, 몇 초 뒤 식별됩니다.
             전방에는 피아식별장치가 없는 <b class="f">아군 보병 분대</b>와 <b class="f">보급 트럭</b>이 있습니다 — 식별 전 사격은 오인사격 위험.
           </p>
           <p class="s-brief">
-            여러분은 <b>1호차(강철 1)</b>에 탄 소대장입니다. 1호차만 직접 움직이고, <b>2·3·4호차는 무전으로만</b> 지휘합니다.
-            명령은 몇 초 뒤 도착하고, 가끔 잘못 알아듣거나 잡음에 묻힙니다. 가만히 있으면 양옆에서 숨어 온 적에게 크게 당합니다 —
-            엄호 방향을 정해 주고, 표적을 지정하고, 엄폐물로 옮기십시오.
+            여러분은 <b>1호차(강철 1)</b>에 탄 소대장입니다. <b>지도의 전차 아이콘</b>이나 오른쪽 <b>[1조] [2조] [소대 전체]</b> 버튼으로 고르고,
+            <b>지도를 우클릭</b>해 메뉴에서 이동·엄호·철수를, <b>적을 우클릭</b>해 목표 지정을 고르십시오. 1호차는 지도 클릭만으로 바로 움직이고,
+            2·3·4호차는 무전으로 몇 초 뒤 움직입니다 (가끔 잘못 알아듣습니다). 가만히 있으면 양옆에서 숨어 온 적에게 크게 당합니다 — 엄호 방향을 정해 주고, 표적을 지정하십시오.
           </p>
           <p class="s-brief">
-            <b>Tab</b> 키를 누르면 1호차 <b>조준 화면</b>으로 들어가 직접 쏠 수 있습니다. 직접 조준하면 더 빠르고 정확하지만,
-            그동안은 무전 지휘를 못 하고(사격 통제 8·9·0 과 보고 요구 R 만 가능) 1호차는 조준경 밖을 잘 못 봅니다. 지도로 돌아오면 포수가 알아서 쏩니다.
+            <b>[조준 화면]</b> 버튼(Tab)으로 1호차를 직접 쏠 수 있습니다. 더 빠르고 정확하지만 그동안은 무전 지휘를 못 합니다.
+            조작이 헷갈리면 언제든 오른쪽 위 <b>[? 조작법]</b>(F1)을 누르십시오.
           </p>
           <p class="s-brief">승리: 적을 모두 격파하거나, 전투력을 잃은 적이 지도 북쪽 끝 밖으로 물러나면 작전 성공. 패배: 소대 전차 4대 중 3대가 격파되면 작전 실패.</p>
           <div class="s-label">작전 시간</div>
@@ -92,80 +102,128 @@
       </div>
     </section>
 
-    <aside class="side">
+    <aside class="side simple" id="side">
+      <div class="side-bar">
+        <div class="view-toggle" role="group" aria-label="화면 정보량">
+          <button type="button" data-view="simple" aria-pressed="true" title="꼭 필요한 정보만">간단 보기</button>
+          <button type="button" data-view="detail" aria-pressed="false" title="승무원·접촉·소대 현황을 모두 펼침">상세 보기</button>
+        </div>
+        <button type="button" class="help-btn" data-help title="조작 요약 카드 (F1)">? 조작법 <kbd>F1</kbd></button>
+      </div>
+
       <section class="card cmd-card">
-        <h2>무전 지휘 · 강철 소대망</h2>
         <div id="cmd" class="cmd"></div>
       </section>
 
       <section class="card log-card">
-        <h2>무전 기록</h2>
+        <h2>무전 기록 <button type="button" class="log-more" data-log-more title="승무원 잡담까지 모든 기록 보기">전체 보기</button></h2>
         <ol id="radio-log" class="radio-log"></ol>
       </section>
 
-      <section class="card">
-        <h2>선택 전차</h2>
+      <details class="card fold" data-fold="unit">
+        <summary>선택 전차 상세 <span class="f-sub">승무원 · 탄약 · 손상 · 위치</span></summary>
         <div id="unit-info"></div>
-      </section>
+      </details>
 
-      <section class="card">
-        <h2>소대 현황</h2>
-        <ul id="roster" class="roster"></ul>
-      </section>
-
-      <section class="card">
-        <h2>접촉 현황 · 전장관리체계</h2>
+      <details class="card fold" data-fold="contacts">
+        <summary>접촉 현황 <span class="f-sub" id="contact-badge"></span></summary>
         <p id="contact-summary" class="c-sum"></p>
         <ul id="enemy-roster" class="enemy-roster"></ul>
         <p class="note">한 대가 본 표적은 소대 전체 지도에 표시됩니다. 사격은 그 표적이 직접 보이는 전차만 할 수 있습니다.</p>
-      </section>
+      </details>
 
-      <section class="card">
-        <h2>조작법</h2>
-        <dl class="keys">
-          <dt>1~4 / 전차 클릭</dt><dd>전차 선택 (받는 대상도 그 전차)</dd>
-          <dt>5 · 6 · 7</dt><dd>받는 대상: 1조(1·2호차) · 2조(3·4호차) · 소대 전체</dd>
-          <dt>M</dt><dd>이동 → 지도 클릭</dd>
-          <dt>C</dt><dd>엄호 → 지켜볼 방향 클릭 (정지, 차체도 그쪽으로)</dd>
-          <dt>B</dt><dd>엄호 이동 → 목표 지점 클릭 (조별로 번갈아 전진)</dd>
-          <dt>T</dt><dd>목표 지정 → 표적 클릭 (빈 곳은 해제)</dd>
-          <dt>W</dt><dd>철수 → 위치 클릭 (처음엔 후진)</dd>
-          <dt>S · R</dt><dd>정지 · 상황 보고 요구</dd>
-          <dt>8 · 9 · 0</dt><dd>사격 금지 · 식별 후 사격 · 자유 사격</dd>
-          <dt>지도 클릭</dt><dd>1호차(지휘 전차)만 바로 이동. 2·3·4호차는 무전 명령으로만 움직임</dd>
-          <dt>표적 클릭</dt><dd>받는 대상에게 목표 지정 (1호차는 바로, 나머지는 무전)</dd>
-          <dt>Q · X</dt><dd>1호차 탄종 전환 · 목표 해제</dd>
-          <dt>V</dt><dd>선택한 전차의 시야 표시</dd>
-          <dt>스페이스바</dt><dd>일시정지 / 재개 (정지 중에도 명령 가능 — 재개하면 전달 시작)</dd>
-          <dt>Tab</dt><dd>1호차 조준 화면 ↔ 지도. 조준 중에는 무전 명령 불가</dd>
-          <dt>조준 화면</dt><dd>마우스 조준(가장자리로 가면 포탑 회전) · 좌클릭 발사 · L 레이저 · Q 탄종 · 휠/Z 배율 · 8·9·0·R 소대 전체</dd>
-          <dt>Esc / 오른쪽 클릭</dt><dd>고른 명령 취소 · 선택 해제</dd>
-        </dl>
-      </section>
+      <details class="card fold" data-fold="roster">
+        <summary>소대 현황 <span class="f-sub">4대의 명령 · 신뢰 · 부상</span></summary>
+        <ul id="roster" class="roster"></ul>
+      </details>
 
-      <section class="card">
-        <h2>지도 기호</h2>
+      <details class="card fold" data-fold="legend">
+        <summary>지도 기호 · 지형 <span class="f-sub">기호 뜻 · 지형별 속도</span></summary>
         <ul class="symbols">
           <li><span class="sym sym-unknown">?</span><span>미상 표적 — 아래 노란 막대가 식별 진행도</span></li>
           <li><span class="sym sym-enemy"></span><span>적 (식별됨)</span></li>
           <li><span class="sym sym-ally"></span><span>아군 보병·트럭·K2 (식별됨)</span></li>
           <li><span class="sym sym-ghost"></span><span>흐린 점선 — 놓친 표적의 마지막 위치</span></li>
           <li><span class="sym sym-hull"></span><span>녹색 반원 — 차체 엄폐 (포탑만 보임)</span></li>
-          <li><span class="sym sym-watch"></span><span>부채꼴 — 엄호 중, 지켜보는 방향</span></li>
+          <li><span class="sym sym-watch"></span><span>부채꼴 — 엄호 중, 지켜보는 방향 (고른 전차만, 상세 보기는 모두)</span></li>
           <li><span class="sym sym-radio">((·))</span><span>무전 명령 전달 중 · <b class="sym-x">무전✕</b> 교신 두절</span></li>
         </ul>
-      </section>
-
-      <section class="card">
-        <h2>지형과 기동 속도</h2>
         <ul id="legend" class="legend"></ul>
         <p class="note">하천은 다리로만 건널 수 있습니다. 숲·시가지는 시선을 가리고, 그 안의 전차는 잘 안 보입니다. 능선은 너머를 가립니다.</p>
-      </section>
+      </details>
     </aside>
   </main>
 
   <!-- M7a 캠페인 화면 (처음 화면·프롤로그·작전 명령·재정비·엔딩) -->
   <div id="camp" class="camp" hidden></div>
+
+  <!-- M7.5 조작 요약 카드 (F1 / ? 버튼) -->
+  <div id="help" class="help" hidden>
+    <div class="h-box" role="dialog" aria-labelledby="help-title">
+      <div class="h-head">
+        <div class="h-title" id="help-title">조작 요약</div>
+        <span class="h-note" id="help-note">마우스만으로 다 됩니다 · 키는 몰라도 됩니다</span>
+        <button type="button" class="c-btn" data-help-close>닫기 <kbd>Esc</kbd></button>
+      </div>
+      <div class="h-grid">
+        <section>
+          <h3>1 · 고르기</h3>
+          <ul>
+            <li>지도의 <b>내 전차 아이콘</b>을 클릭</li>
+            <li>오른쪽 <b>[1조] [2조] [소대 전체]</b> 버튼</li>
+            <li>고른 전차만 사거리 원·엄호 부채꼴이 보입니다</li>
+          </ul>
+          <h3>2 · 명령 (우클릭 메뉴)</h3>
+          <ul>
+            <li><b>땅을 우클릭</b> → 이동 · 엄호(그쪽 지켜봐) · 철수</li>
+            <li><b>적을 우클릭</b> → 목표 지정</li>
+            <li><b>내 전차를 우클릭</b> → 정지 · 상황 보고</li>
+            <li>1호차는 <b>지도 클릭</b>만으로 바로 이동</li>
+            <li>오른쪽 <b>명령 버튼</b>을 누르고 지도를 클릭해도 됩니다</li>
+          </ul>
+          <h3>3 · 무전</h3>
+          <ul>
+            <li>2·3·4호차는 무전으로 <b>몇 초 뒤</b> 움직입니다. "수신" 복창을 확인하세요</li>
+            <li>지도 아래 안내 줄이 <b>지금 클릭하면 무슨 일이 생기는지</b> 알려 줍니다</li>
+          </ul>
+        </section>
+        <section>
+          <h3>꼭 알아 둘 키</h3>
+          <dl class="h-keys">
+            <dt>Space</dt><dd>일시정지 / 재개 (멈춘 채 명령 가능)</dd>
+            <dt>Tab</dt><dd>1호차 조준 화면 ↔ 지도</dd>
+            <dt>1~4</dt><dd>전차 고르기</dd>
+            <dt>5 · 6 · 7</dt><dd>1조 · 2조 · 소대 전체</dd>
+            <dt>M · C · W</dt><dd>이동 · 엄호 · 철수 (→ 지도 클릭)</dd>
+            <dt>T</dt><dd>목표 지정 (→ 표적 클릭)</dd>
+            <dt>S · R</dt><dd>정지 · 상황 보고</dd>
+            <dt>Esc</dt><dd>취소 · 메뉴 닫기</dd>
+            <dt>F1</dt><dd>이 카드</dd>
+          </dl>
+          <h3>그 밖의 키 <span class="h-dim">(버튼으로도 됨)</span></h3>
+          <p class="h-small">B 엄호 이동 · K 흑표 지원 · 8·9·0 사격 금지·식별 후·자유 · Q 1호차 탄종 · X 목표 해제 · V 시야 표시</p>
+        </section>
+        <section>
+          <h3>조준 화면 (1호차 직접 사격)</h3>
+          <ul>
+            <li>마우스로 조준 — 가장자리로 가면 포탑이 돕니다</li>
+            <li><b>좌클릭</b> 발사 · <b>우클릭</b>(L) 레이저 거리 · <b>휠</b>(Z) 배율</li>
+            <li>조준 중에는 무전 지휘 불가 (8·9·0·R 만 소대 전체)</li>
+            <li>왼쪽 위 <b>[◀ 지도로]</b> 또는 Tab 으로 돌아가기</li>
+          </ul>
+          <h3>지도 기호</h3>
+          <ul class="symbols">
+            <li><span class="sym sym-unknown">?</span><span>미상 표적 — 식별 전에는 쏘지 마세요 (아군일 수 있음)</span></li>
+            <li><span class="sym sym-enemy"></span><span>적</span></li>
+            <li><span class="sym sym-ally"></span><span>아군 (보병·트럭·K2)</span></li>
+            <li><span class="sym sym-watch"></span><span>엄호 중 — 지켜보는 방향</span></li>
+          </ul>
+          <h3>요령</h3>
+          <p class="h-small">가만히 있으면 옆구리를 맞습니다. <b>조마다 엄호 방향</b>을 정해 주고, 보이는 적에게 <b>목표 지정</b>. 무전 기록의 <b class="h-red">붉은 줄</b>(피격·격파·경고)을 먼저 보세요.</p>
+        </section>
+      </div>
+    </div>
+  </div>
 
   <!-- 순서 중요: core → map → units → game/ui → render → main -->
   <script src="js/core/config.js"></script>
@@ -203,6 +261,9 @@
   <script src="js/ui/panel.js"></script>
   <script src="js/ui/result.js"></script>
   <script src="js/ui/command-bar.js"></script>
+  <script src="js/ui/layout.js"></script>
+  <script src="js/ui/context-menu.js"></script>
+  <script src="js/ui/tutorial.js"></script>
   <script src="js/ui/campaign-ui.js"></script>
   <script src="js/render/terrain-layer.js"></script>
   <script src="js/render/renderer.js"></script>

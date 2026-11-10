@@ -1,6 +1,6 @@
 # The Metal Man — 설계 문서
 
-> 다음 개발 세션이 가장 먼저 읽는 문서입니다. 단계(M1~M8)를 진행할 때마다 "진행 현황"과 "구조" 절을 갱신하십시오.
+> 다음 개발 세션이 가장 먼저 읽는 문서입니다. 단계(M1~M8, M7.5 포함)를 진행할 때마다 "진행 현황"과 "구조" 절을 갱신하십시오.
 
 ## 1. 게임 소개
 
@@ -33,6 +33,7 @@
 | **M6** | 1호차 조준 화면 | ✅ 완료 |
 | **M7a** | 캠페인 뼈대 | ✅ 완료 |
 | **M7b** | 재정비 깊이 (선택·보충·승무원 관리) | ✅ 완료 |
+| **M7.5** | 조작·화면 정리 (마우스 조작·간단 보기·기초 훈련) | ✅ 완료 |
 | M8 | 적 다양화와 마무리 | 예정 |
 
 ### M1 지도와 이동 (완료)
@@ -356,6 +357,34 @@
 - 조정 과정(게임용 추정치): 처음 값(재정비 6·8·4·6시간, 궤도 3·엔진 4시간, 휴식 −11/시간, 보급 36·60·84발, K2 기본 30%+성공 30%, 후송 0.5시간, 흑표 거절 25%·7분)으로는 좋은 지휘 92%·조준 화면만 붕괴 48% 로 너무 쉬웠다 → 시간 5·6·4·5, 궤도 4·엔진 5시간, 휴식 −8, 보급 30·48·66, K2 5%+성공 32%+격파 비율 20%(최대 60%), 후송 1시간, 흑표 거절 35%·4분. 재정비 자원만 줄여서는 좋은 지휘가 거의 안 변했다(이 전략은 잃는 게 적어서) — 흑표와 K2 확률이 더 큰 손잡이였다.
 - 더 어렵게: `Campaign.K.REPAIR_H`·`SUPPLY_POOL`·`K2_P*`, `OPS[i].refitHours`, `TMM.SUPPORT.REFUSE_P`·`STAY_SEC`. 더 쉽게는 반대로.
 
+### M7.5 조작·화면 정리 (완료)
+
+직접 해 본 결과 "어떤 키가 뭔지 기억이 안 남", "화면 정보가 너무 많아 어디를 봐야 할지 모름" 두 가지가 어려웠다. **게임 규칙·난이도는 바꾸지 않고**(전투 규칙 파일은 `battle.js` 의 기초 훈련 승패 건너뛰기 한 줄만) 조작과 화면 구성만 고쳤다.
+
+- **마우스만으로 다 되게** (키는 몰라도 됨, 기존 단축키는 모두 그대로 동작):
+  - 고르기: 지도의 전차 아이콘 클릭, 또는 무전 지휘 창의 큰 **[1조] [2조] [소대 전체]** 버튼 + 호차 버튼 4개. 처음부터 지휘 전차가 골라져 있다(`main.js createGame`). 조·소대를 고르면 정보 창은 그중 첫 전차(소대 전체면 지휘 전차).
+  - **우클릭 메뉴** (`js/ui/context-menu.js` 그리기, 내용은 `main.js actions.openMenu`): 땅 → 이동·엄호(이쪽 지켜봐)·철수 | 엄호 이동(소대 전체)·흑표 지원 요청(캠페인) / 적·미상 표적 → 목표 지정(미식별이면 ⚠ 표시)·이쪽 엄호 / 내 전차 → (그 전차를 고르고) 정지·상황 보고·목표 해제 | 지휘 전차면 탄종 전환·조준 화면. 갈 수 없는 땅·받을 전차 없음은 회색 + 이유. 항목마다 단축키 표시, 메뉴가 떠 있을 때 그 글자 키를 누르면 실행(↑↓ Enter 도 됨). 메뉴 밖을 눌러 닫은 클릭은 지도 명령으로 이어지지 않는다(`justClosed`). 고른 명령(버튼으로 고른 이동 등)이 있을 때의 우클릭은 예전처럼 취소. 연막은 게임에 없어서 넣지 않았다.
+  - **명령 버튼** = 아이콘(선 SVG) + 한글 이름 + 단축키, 마우스를 올리면 한 줄 설명(`title` + 안내 줄). 3열: 이동·엄호·철수 / 목표 지정·정지·상황 보고 / 엄호 이동·흑표 지원(덜 쓰는 것, 흐리게). 사격 통제 3개, **1호차 직접**: [조준 화면 Tab] [탄종 전환 Q].
+  - **안내 줄** (`#guide`, 지도 아래, `CommandBar.update → guideText`): 지금 클릭하면 무슨 일이 생기는지. 우선순위 — 작전 종료 > 조준 화면(숨김) > 메뉴 > 마우스를 올린 버튼·메뉴 항목 설명 > 고른 명령("▶ 2조 · 엄호 — 지켜볼 방향을 클릭 · 우클릭/Esc 취소") > 커서 아래 전차·표적("클릭: 2조에게 목표 지정 (적 전차 3)") > 기본("2조 선택됨 · 지도를 우클릭해 명령"). 커서 아래 지형은 같은 줄 오른쪽에 작게.
+  - 화면 단추: 맨 위 상태 표시가 곧 **일시정지/재개 단추**(`#run-state`: "▶ 작전 개시 / ▶ 재개 / ❚❚ 진행 중 ×1"), 지도 왼쪽 위 **[시야 표시 V]**, 조준 화면 왼쪽 위 **[◀ 지도로 Tab]**(`#scope-exit`).
+  - **조작 요약 카드** (`#help`, `js/ui/layout.js`): F1·? 키·오른쪽 위 [? 조작법]. 한 화면 3칸(고르기·우클릭 명령·무전 / 꼭 알아 둘 키 + 그 밖의 키 / 조준 화면·지도 기호·요령). 전투 중에 열면 잠깐 멈추고 닫으면 다시 진행. Esc·바깥 클릭으로 닫힘.
+  - **단축키 정리**: 카드·교육에서는 꼭 필요한 것만 — Space, Tab, 1~4, 5·6·7, M·C·W, T, S·R, Esc, F1. 나머지(B·K·8·9·0·Q·X·V)는 "그 밖의 키 (버튼으로도 됨)" 한 줄. 키 처리(`input.js`)는 하나도 빼지 않았다.
+- **화면 정보 줄이기** (`js/ui/layout.js` `TMM.Layout`):
+  - **간단 보기**(기본) ↔ **상세 보기** 버튼 하나. 고른 보기는 `localStorage['tmm.view']`. `game.viewDetail` 로 그리기에도 전달.
+  - 간단 보기의 오른쪽 창: 누구에게 · **고른 전차 요약 한 줄**(받는 전차마다: 호차 번호 · 이름 · 상태 아이콘 ■정지 ▶이동 ◎엄호 ●교전 ▲정비 ×격파 · 탄 n · 손상/무전✕/((·))는 있을 때만, 누르면 그 전차 고르기) · 명령 버튼 · **무전 기록 최근 5줄**. 나머지 칸(선택 전차 상세·승무원 카드, 접촉 현황, 소대 현황, 지도 기호·지형)은 `<details>` 로 접힘 — 제목에 한 줄 요약(접촉 현황: "보이는 적 2 · 미상 1").
+  - 무전 기록 (`radio-log.js`): 간단 보기에서는 승무원 잡담(`kind: 'crew'`)을 빼고 최근 5줄. [전체 보기] 단추 또는 상세 보기면 전부. 중요한 줄(warn·kill·loss·ff — 피격·격파·손실·오인사격·경고)은 왼쪽 색 막대 + 옅은 바탕.
+  - 지도 위 표시(`renderer.js focusUnits`): 사거리 원·사격선·선택 괄호는 **고른 전차들(받는 대상)만**, 엄호 부채꼴도 간단 보기에서는 고른 전차만(상세 보기면 모두). 시야 표시는 정보 창의 전차 한 대.
+  - 겹치던 정보 하나로: 무전 지휘 창의 안내문 → 지도 아래 안내 줄, 커서 아래 표적의 "클릭하면 목표 지정" → 안내 줄, 패널의 조작법·지도 기호 두 칸 → 조작 요약 카드 + 접힌 "지도 기호·지형" 한 칸, 상태 표시와 일시정지 → 한 단추.
+  - 글자: 명령 버튼 12.5px, 요약 13px, 조 버튼 15px, 무전 기록(간단) 13px. 오른쪽 창 380 → 392px. 좁은 화면(900px 이하)은 지도 아래에 창을 쌓는다(예전엔 창이 지도 아래쪽 55px 을 덮었음).
+- **기초 훈련** (`js/ui/tutorial.js` `TMM.Tutorial`, 훈련 모드 화면 맨 위 [기초 훈련]): 주간, 적·비지휘 아군 없이 시작하고 바로 진행(일시정지 안 함). 지도 위(#tut)에 단계·할 일 한 줄·도움말, 지도에 깜빡이는 노란 고리(`renderer.js drawTutorial`).
+  1. 이동: 1호차 아이콘 클릭 → 노란 동그라미 클릭(1호차 북쪽 약 450m 의 가장 빠른 땅) → 도착(3칸 안, 정지).
+  2. 무전 명령: [2조] → 지도를 우클릭 → [엄호] → 3·4호차가 복창하고 `order.type === 'cover'` 이면 완료(단축키 C 로 해도 됨).
+  3. 사격: 소대에서 2.2~2.7km 북쪽의 트인 땅(1호차·2조가 볼 수 있는 곳, `enemySpot`)에 천마호 1대(진지 방어, 매복 거리 60m 라 쏘지 않음). 식별되면 우클릭 → [목표 지정] → 어느 전차든 `targetId` 가 그 적이면, 격파되거나 게임 90초 뒤 완료.
+  - 완료 카드: [실전 훈련 ▸] [다시 하기] [처음 화면] — `sessionStorage 'tmm.next'` = training | tutorial 을 남기고 다시 연다. 언제든 [그만두기].
+  - 승패 판정 없음: `Battle.step` 이 `game.tutorial` 이면 훈련 모드 승패를 건너뛴다(적이 아직 '지도 밖'이라 바로 승리하지 않게).
+- **교육 문구**: 프롤로그 교육 1·2·3(`campaign-data.js`), 훈련 모드 시작 화면, 작전 명령 화면의 출동 안내, 첫 무전 기록 안내, 조준 화면 첫 안내·일시정지 문구를 새 조작(아이콘 클릭·우클릭 메뉴·단추)에 맞게 고쳤다.
+- **확인**: 기존 단축키 전부(1~7, M·C·B·T·W·K·S·R, 8·9·0, Q·X·V, Space, Tab, Esc), 조준 화면(레이저·배율·수동 발사), 흑표 요청(메뉴), 결과 → 재정비, 기초 훈련 3단계를 Playwright 로 마우스·키로 실제 눌러 봄. 모의 캠페인(`tools/sim-campaign.js`)은 그대로 돈다 — 규칙은 그대로.
+
 ## 4. 핵심 규칙과 수치
 
 - 지도: 160 × 120 칸, **1칸 = 50m** → 8km × 6km. 좌표 단위는 "칸"(실수). x = 서→동, y = 북→남.
@@ -406,22 +435,25 @@ js/campaign/campaign-data.js  M7a 작전 5개(위치·적·목표·지도 표시
 js/campaign/campaign.js  캠페인 규칙(DOM 없음): 상태(v2), 작전 → 전투 설정, 결과 이월, 실패 여파, M7b 재정비(준비·추천·시간·보급·좌석 배정·부상자·보충병·K2 보충·이벤트 적용), 엔딩·에필로그, 저장·옛 저장 고쳐 읽기 (TMM.Campaign, 수치 TMM.Campaign.K) ← 재정비 균형은 여기
 js/game/input.js         마우스·키보드 입력 (TMM.Input)
 js/ui/panel.js           오른쪽 패널(엄폐·접촉 현황 포함)·상단 시계·커서 안내 (TMM.Panel)
-js/ui/radio-log.js       무전 기록 창 (TMM.RadioLog)
+js/ui/radio-log.js       무전 기록 창: M7.5 간단 보기 5줄·잡담 빼기·중요한 줄 강조 (TMM.RadioLog)
 js/ui/result.js          승패 결과 화면 (TMM.Result)
-js/ui/command-bar.js     무전 지휘 창: 받는 대상·명령·사격 통제 버튼, 안내, 송신 대기열 (TMM.CommandBar)
+js/ui/command-bar.js     무전 지휘 창: 받는 대상([1조][2조][소대 전체] + 호차)·선택 요약 한 줄·명령(아이콘+이름+단축키)·사격 통제·1호차 직접 버튼, 송신 대기열, M7.5 지도 아래 안내 줄(#guide) (TMM.CommandBar)
+js/ui/layout.js          M7.5 간단/상세 보기·접는 칸·조작 요약 카드(F1, #help) (TMM.Layout)
+js/ui/context-menu.js    M7.5 우클릭 메뉴 그리기·닫기·단축키로 고르기 (TMM.ContextMenu, 내용은 main.js actions.openMenu)
+js/ui/tutorial.js        M7.5 기초 훈련 3단계(이동·무전 명령·사격): 준비·할 일 한 줄(#tut)·완료 판정 (TMM.Tutorial)
 js/ui/campaign-ui.js     캠페인 화면(#camp): 처음 화면·프롤로그·작전 명령(요약 지도·탄종 배분)·M7b 재정비(소식·승무원 이벤트·고르기·결과)·엔딩 (TMM.CampaignUI)
 js/render/terrain-layer.js  지형 바탕을 한 번 그려두는 오프스크린 캔버스
 js/render/scope-view.js  M6 조준 화면 그리기: 높이 버퍼 지형(주간/열상)·표적 실루엣·효과·조준선·나침반·정보 띠·무전 6줄·자막·경고 테두리·첫 안내 (TMM.ScopeView)
 js/render/renderer.js    매 프레임 그리기(야간 어둠·시야 표시·전차·접촉 기호·사격선·사거리 원·예광탄·감시 부채꼴·무전 표시·명령 미리보기), 좌표 변환, 클릭 판정
 tools/sim-load.js        (개발용) 전투 규칙 스크립트를 Node vm 으로 읽기
 tools/sim-campaign.js    (개발용) 모의 캠페인: node tools/sim-campaign.js <good|scope|passive> [횟수] [시드] [rec|idle] [흑표 1|0]
-js/main.js               처음 화면 진입(showEntry: sessionStorage 'tmm.next')·훈련 모드 시작 화면·boot(setup: {light}|{campaign}), 작전 목표 띠, 행동(actions: 받는 대상·명령 고르기·지도/표적 클릭, M6 조준 화면 열기·발사·레이저·배율), 무전망 밖 알림(오인사격·중대 무전)·화면 효과, 조준 화면 자막·경고(피격·격파·교신 두절), 주 루프
+js/main.js               처음 화면 진입(showEntry: sessionStorage 'tmm.next' = campaign|training|tutorial)·훈련 모드 시작 화면(기초 훈련/실전)·boot(setup: {light}|{campaign}|{tutorial}), M7.5 우클릭 메뉴 내용(actions.openMenu), 작전 목표 띠, 행동(actions: 받는 대상·명령 고르기·지도/표적 클릭, M6 조준 화면 열기·발사·레이저·배율), 무전망 밖 알림(오인사격·중대 무전)·화면 효과, 조준 화면 자막·경고(피격·격파·교신 두절), 주 루프
 docs/DESIGN.md           이 문서
 ```
 
 ### 주요 데이터
 
-- `TMM.game` (`Battle.create` + main.js): M7b `support`(흑표 지원 상태, `TMM.Support`), `crewPeople`(보충병 정의). M7a `op`(캠페인 작전, 없으면 훈련), `campaign`(캠페인 상태), `enemyRally`, `enemyExits`, `opCallsDone`. `over.result`·`over.reason`. 그 밖 `{ map, units, enemies, allies, light, startSeconds, gameSeconds, vis, intel, enemyGo, enemyBroken, ffCount, lastShotAt, combat, over, rand, selectedId, paused, started, speedMult, hover, hoverContactId, showSight, fx, radio, bound, cmd, scope, pendingEvents, scopeFx, scopeUi }`
+- `TMM.game` (`Battle.create` + main.js): M7.5 `hoverUnitId`(커서 아래 내 전차), `viewDetail`(상세 보기), `tutorial`(기초 훈련 `{ step, marks[], move, watch, enemy, shotAt, done }`, 없으면 일반 전투). M7b `support`(흑표 지원 상태, `TMM.Support`), `crewPeople`(보충병 정의). M7a `op`(캠페인 작전, 없으면 훈련), `campaign`(캠페인 상태), `enemyRally`, `enemyExits`, `opCallsDone`. `over.result`·`over.reason`. 그 밖 `{ map, units, enemies, allies, light, startSeconds, gameSeconds, vis, intel, enemyGo, enemyBroken, ffCount, lastShotAt, combat, over, rand, selectedId, paused, started, speedMult, hover, hoverContactId, showSight, fx, radio, bound, cmd, scope, pendingEvents, scopeFx, scopeUi }`
   - M6 `scope`: 위 M6 절. `pendingEvents`: 전투 틱 밖(조준 화면 발사)에서 생긴 사건, 다음 `Battle.step` 이 처리. `scopeFx`·`scopeUi`(경고·자막·첫 안내·반동): 화면 전용(main.js).
   - M4 `radio`: `{ queue[], timers[], busyUntil, pending: Map('전차id:종류' → {unitId, order, state}), batch, control }`. `state`: queued·tx·garble·noack·ack·exec. `bound`: 진행 중인 엄호 이동. `cmd`: `{ to, mode }` 화면의 받는 대상과 지도 클릭을 기다리는 명령.
   - `over`: 승패가 나면 `{ win, at }`. `fx`: 화면 효과(실제 시간 기준으로 사라짐).
@@ -458,6 +490,7 @@ M7b 까지로 캠페인의 뼈대·재정비·보충이 다 섰다. M8 에서 �
   - 적 AI 는 `EnemyAI.update` 의 `mode`(advance·engage·deploy·hold·retreat·withdraw·defend)와 작전마다의 `static/delay/engageM/fireM/tag` 로 움직인다. 새 종류는 `ai.kind` 로 행동을 갈라 넣는 게 쉽다(예: 미사일 차량은 1.5~3km 에서 멈춰 쏘고 가까워지면 물러남).
   - 작전별 편성은 `campaign-data.js` 의 `enemies/extra/waves`. 실패 여파(`battleSpec`)는 차종과 상관없이 동작한다.
 - **흑표 지원과 적**: 흑표 K2 는 `game.allies` 라 적 표적 목록(`Gunnery.allTargets`)에 이미 들어 있다. 새 적 무기(미사일)도 같은 경로로 맞힐 수 있다.
+- **화면 (M7.5 이후)**: 새 명령은 `CommandBar.ORDERS`(이름·단축키·한 줄 설명·안내) 에 넣으면 버튼·안내 줄·우클릭 메뉴(`actions.openMenu` 에서 `O(id)`)가 같은 문구를 쓴다. 새 정보 칸은 간단 보기를 지키도록 `<details class="card fold">` 로. 새 키는 `input.js` 에 더하고, 꼭 필요한 것만 조작 요약 카드(`index.html #help`)의 '꼭 알아 둘 키'에.
 - **마무리 후보**: 난이도 선택(기본에서 소대장 전사 없음 → 어려움에서 소대장 부상·전사, `Crew.hurt` 의 `m.player` 제한을 난이도로), 저장 슬롯, 재정비 화면 모바일 정리(좌석 select 가 좁음), 조준 화면 헌터킬러, 효과음(무전 잡음·발사), 캠페인 통계 화면(작전별 사격·명중·피해), 튜토리얼 작전.
 - **균형**: 아래 M7b 메모의 모의 캠페인 숫자를 기준으로, 새 적을 넣을 때마다 `good` 이 임무 완수 70~90%, `scope`·`passive` 가 절반 이상 소대 붕괴로 남는지 본다. 재정비 수치는 `Campaign.K`, 작전별 시간은 `OPS[i].refitHours`, 흑표는 `TMM.SUPPORT`.
 - **모의 캠페인 방법**: `node tools/sim-campaign.js good 48` (약 4분). 직접 짜려면 '확장 지침'의 Node `vm` 방법(`tools/sim-load.js`)으로 읽고, `s = Campaign.newState(); s.phase = 'briefing'` → 반복 `{ Campaign.applyPlan(s); g = Battle.create({ op: Campaign.battleSpec(s), map, crew: s.crew, rand }); …Battle.step… ; Campaign.record(s, g); if (s.refitPending) Campaign.autoRefit(s, 'rec', rand); }` 를 `s.phase === 'ending'` 까지. 재정비를 직접 고르려면 `plan = Campaign.recommend(s)` 를 고쳐서 `Campaign.applyRefit(s, plan, rand)`.

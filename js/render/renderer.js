@@ -473,10 +473,12 @@ TMM.Renderer = (function () {
 
   // ---- M4 무전 지휘 표시 ----
   // 엄호 중인 전차의 감시 부채꼴, 엄호 이동 목표 지점
-  function drawOrders(ctx, view, game) {
+  //   M7.5: 간단 보기에서는 고른 전차(focus)의 부채꼴만, 상세 보기면 모든 전차
+  function drawOrders(ctx, view, game, focus) {
     const half = (TMM.RADIO.WATCH_HALF_DEG * Math.PI) / 180;
     for (const u of game.units) {
       if (u.destroyed || u.watch == null || u.state === 'moving') continue;
+      if (!game.viewDetail && !focus.includes(u)) continue;
       const p = view.toScreen(u.x, u.y);
       const r = Math.max(34, view.scale * 9);
       const color = TMM.TEAMS[u.team].color;
@@ -704,23 +706,73 @@ TMM.Renderer = (function () {
     if (game.op) drawMarks(ctx, view, game.op.marks, 0.8); // M7a 작전 목표·저지선
 
     const sel = game.units.find((u) => u.id === game.selectedId);
+    // M7.5: 지도 위 표시(사거리 원·엄호 부채꼴·사격선)는 고른 전차(받는 대상) 것만
+    const focus = focusUnits(game, sel);
     if (sel && game.showSight && !sel.destroyed) drawSight(ctx, view, game, sel);
-    drawRange(ctx, view, game, sel);
-    drawOrders(ctx, view, game);
-    for (const u of game.units) drawPath(ctx, view, u, u.id === game.selectedId);
-    drawFireLine(ctx, view, game, sel);
+    for (const u of focus) drawRange(ctx, view, game, u);
+    drawOrders(ctx, view, game, focus);
+    for (const u of game.units) drawPath(ctx, view, u, focus.includes(u));
+    for (const u of focus) drawFireLine(ctx, view, game, u);
+    if (game.tutorial) drawTutorial(ctx, view, game, time);
     const contacts = Array.from(game.intel.friend.contacts.values()).filter((c) => c.known);
     // 잔해 → 마지막 위치 → 보이는 접촉 순서로 (보이는 것이 위에)
     for (const c of contacts) if (c.wreck) drawContact(ctx, view, game, c, sel);
-    for (const u of game.units) if (u.destroyed && u.id !== game.selectedId) drawUnit(ctx, view, u, false, time);
+    for (const u of game.units) if (u.destroyed && !focus.includes(u)) drawUnit(ctx, view, u, false, time);
     for (const c of contacts) if (!c.wreck && !c.visible) drawContact(ctx, view, game, c, sel);
     for (const c of contacts) if (!c.wreck && c.visible) drawContact(ctx, view, game, c, sel);
-    for (const u of game.units) if (!u.destroyed && u.id !== game.selectedId) drawUnit(ctx, view, u, false, time);
-    if (sel) drawUnit(ctx, view, sel, true, time);
+    for (const u of game.units) if (!u.destroyed && !focus.includes(u)) drawUnit(ctx, view, u, false, time);
+    for (const u of focus) drawUnit(ctx, view, u, true, time);
     drawBadges(ctx, view, game, time);
     drawFx(ctx, view, game, time);
     drawPreview(ctx, view, game);
     drawCursor(ctx, view, game);
+  }
+
+  // M7.5: 고른 전차들 = 받는 대상 (전차 한 대·조·소대). 아무것도 안 골랐으면 없음.
+  function focusUnits(game, sel) {
+    if (!sel || !game.cmd) return sel ? [sel] : [];
+    const list = TMM.Command.recipients(game, game.cmd.to).slice();
+    if (!list.includes(sel)) list.push(sel);
+    return list;
+  }
+
+  // M7.5 기초 훈련: 할 일 표시 (깜빡이는 노란 고리 + 글자)
+  function drawTutorial(ctx, view, game, time) {
+    const marks = game.tutorial.marks || [];
+    for (const m of marks) {
+      const p = view.toScreen(m.x, m.y);
+      const pulse = 0.5 + 0.5 * Math.sin(time * 5);
+      const r = (m.r || 2.5) * view.scale;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 214, 90,' + (0.55 + 0.45 * pulse).toFixed(2) + ')';
+      ctx.lineWidth = 3;
+      ctx.setLineDash(m.unit ? [] : [6, 4]);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(m.unit ? 22 : 12, r) + pulse * 4, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (!m.unit) {
+        ctx.fillStyle = 'rgba(255, 214, 90, 0.9)';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (m.label) {
+        ctx.font = '700 12px ' + FONT_MONO;
+        const w = ctx.measureText(m.label).width + 12;
+        const ly = p.y - Math.max(m.unit ? 22 : 12, r) - 14;
+        ctx.fillStyle = 'rgba(20, 18, 6, 0.9)';
+        ctx.fillRect(p.x - w / 2, ly - 10, w, 19);
+        ctx.strokeStyle = 'rgba(255, 214, 90, 0.9)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(p.x - w / 2, ly - 10, w, 19);
+        ctx.fillStyle = '#ffd65a';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(m.label, p.x, ly);
+      }
+      ctx.restore();
+    }
   }
 
   // 선택 전차의 시야 표시: 안 보이는 곳을 어둡게, 부분적으로 보이는 곳(숲 사이)은 옅게

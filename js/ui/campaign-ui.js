@@ -223,7 +223,7 @@ TMM.CampaignUI = (function () {
       '<button type="button" class="c-btn dim" data-preset="20">기본 20/12</button>' +
       '<button type="button" class="c-btn dim" data-preset="12">고폭 위주 12/20</button>' +
       '<button type="button" class="c-btn dim" data-preset="op">권장 (' + op.ammo + '/' + (32 - op.ammo) + ')</button></div>' +
-      '<div class="c-nav"><span class="c-gap">전차 ' + alive.length + '대 출동 · 작전 지도에서 스페이스바를 누르면 작전 개시</span>' +
+      '<div class="c-nav"><span class="c-gap">전차 ' + alive.length + '대 출동 · 작전 지도 위의 [▶ 작전 개시](스페이스바)로 시작</span>' +
       '<button type="button" class="r-btn s-go" data-go data-focus>출동 ▸</button></div>',
       'orders'
     );

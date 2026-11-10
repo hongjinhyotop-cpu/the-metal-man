@@ -77,6 +77,8 @@ TMM.Battle = (function () {
         // M7a 캠페인: 작전마다 다른 승패 조건 (objectives.js)
         const r = TMM.Objective.check(game);
         if (r) game.over = Object.assign({ at: game.gameSeconds }, r);
+      } else if (game.tutorial) {
+        // M7.5 기초 훈련: 승패 없음 (tutorial.js 가 단계로 끝을 정한다)
       } else if (game.enemies.every((e) => e.destroyed || e.exited)) game.over = { win: true, at: game.gameSeconds, result: 'success' };
       else if (game.units.filter((u) => u.destroyed).length >= TMM.CONFIG.PLATOON_LOSS_FAIL) game.over = { win: false, at: game.gameSeconds, result: 'collapse' };
       if (game.over) {

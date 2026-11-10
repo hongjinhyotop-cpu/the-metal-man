@@ -5,14 +5,17 @@
 (function () {
   const C = TMM.CONFIG;
 
-  // setup: { light } 훈련 모드 / { campaign: state } M7a 캠페인 작전
+  // setup: { light } 훈련 모드 / { campaign: state } M7a 캠페인 작전 / { tutorial: true } M7.5 기초 훈련
   function createGame(setup) {
     const camp = setup.campaign || null;
     const op = camp ? TMM.Campaign.battleSpec(camp) : null;
-    const game = TMM.Battle.create({ light: setup.light, op, crew: camp ? camp.crew : undefined, map: TMM._map });
+    const game = TMM.Battle.create({ light: setup.tutorial ? 'day' : setup.light, op, crew: camp ? camp.crew : undefined, map: TMM._map });
     game.campaign = camp;
+    const ctrl0 = TMM.Radio.controlUnit(game);
     Object.assign(game, {
-      selectedId: null,
+      selectedId: ctrl0 ? ctrl0.id : null, // M7.5: 처음부터 지휘 전차가 골라져 있다
+      hoverUnitId: null,
+      viewDetail: false,
       paused: true, // 처음에는 작전 대기 상태
       started: false,
       speedMult: 1,
@@ -20,10 +23,11 @@
       hoverContactId: null,
       showSight: false, // V 키: 선택 전차의 시야 표시
       fx: [], // 화면 효과 (사격 궤적, 피탄 섬광)
-      cmd: { to: '1', mode: null }, // M4 무전 지휘: 받는 대상, 지도 클릭을 기다리는 명령
+      cmd: { to: ctrl0 ? String(ctrl0.id) : '1', mode: null }, // M4 무전 지휘: 받는 대상, 지도 클릭을 기다리는 명령
       scopeFx: [], // M6 조준 화면 효과 (세계 좌표, 실제 시간)
       scopeUi: { alert: null, voice: null, guide: false, recoil: 0, hitShake: 0, timers: [] },
     });
+    if (setup.tutorial) TMM.Tutorial.setup(game); // M7.5 기초 훈련: 적·비지휘 아군을 비우고 단계별 할 일
     return game;
   }
 
@@ -44,6 +48,10 @@
         el.hidden = true;
         boot({ light });
       });
+      el.querySelector('[data-basic]').addEventListener('click', () => {
+        el.hidden = true;
+        boot({ tutorial: true });
+      });
       el.querySelector('[data-back]').addEventListener('click', () => {
         el.hidden = true;
         TMM.CampaignUI.title();
@@ -55,11 +63,13 @@
   // ---- M7a 처음 화면: 이어하기 / 새 캠페인 / 훈련 모드 ----
   // 한 페이지에서 전투는 한 번만 돈다. 전투가 끝나면 결과 화면의 버튼이 다음 화면을 정해 두고 페이지를 다시 연다(sessionStorage 'tmm.next').
   function showEntry() {
+    TMM.Layout.init(); // M7.5 간단/상세 보기, 조작 요약 카드(F1)
     TMM.CampaignUI.init({ training: showTraining, battle: (s) => boot({ campaign: s }) });
     let next = null;
     try { next = sessionStorage.getItem('tmm.next'); sessionStorage.removeItem('tmm.next'); } catch (e) { /* 저장소 없음 */ }
     if (next === 'campaign' && TMM.Campaign.load()) return TMM.CampaignUI.route(TMM.Campaign.load());
     if (next === 'training') return showTraining();
+    if (next === 'tutorial') return boot({ tutorial: true });
     TMM.CampaignUI.title();
   }
 
@@ -120,6 +130,8 @@
     }
     function showScope(on) {
       scopeCanvas.hidden = !on;
+      document.getElementById('scope-exit').hidden = !on;
+      TMM.ContextMenu.close();
       wrapEl.classList.toggle('scoped', on);
       canvas.style.cursor = 'default';
     }
@@ -152,9 +164,89 @@
       },
       setTo(spec) {
         if (scoped()) return actions.scopeBlocked();
+        TMM.ContextMenu.close();
         cmd.to = spec;
         cmd.mode = null;
         if (/^[1-4]$/.test(spec)) game.selectedId = Number(spec);
+        else {
+          // M7.5: 조·소대를 고르면 정보 창은 그중 살아 있는 첫 전차(소대 전체면 지휘 전차)
+          const us = TMM.Command.recipients(game, spec);
+          const first = us.find((u) => u === ctrlUnit()) || us.find((u) => !u.destroyed) || us[0];
+          if (first) game.selectedId = first.id;
+        }
+      },
+      // M7.5 우클릭 메뉴: info = { unitId, contactId, x, y } (지도 좌표), sx·sy = 지도 화면 좌표
+      openMenu(info, sx, sy) {
+        if (game.over || scoped()) return;
+        const M = TMM.ContextMenu;
+        const O = (id, extra) => {
+          const o = TMM.CommandBar.ORDERS.find((x) => x.id === id);
+          return Object.assign({ label: o.label, key: o.key, desc: o.desc }, extra);
+        };
+        // 내 전차: 그 전차를 고르고 정지·보고 (+ 지휘 전차면 탄종·조준 화면)
+        if (info.unitId != null) {
+          const u = unitById(info.unitId);
+          if (!u) return;
+          actions.select(u.id);
+          const me = u === ctrlUnit();
+          const head = { title: u.callsign + ' · ' + TMM.RADIO.call(u), sub: u.destroyed ? '격파됨' : me ? '지휘 전차 — 바로 실행' : '무전으로 명령 — 몇 초 걸림' };
+          if (u.destroyed) return M.open(sx, sy, head, [{ label: '격파된 전차입니다', disabled: true, why: '명령을 받을 수 없습니다', run() {} }]);
+          const list = [
+            O('stop', { run: () => issue({ type: 'stop' }) }),
+            O('report', { run: () => issue({ type: 'report' }) }),
+            { label: '목표 해제', key: 'X', desc: '지정한 표적을 풀고 알아서 쏘게 합니다', disabled: u.targetId == null, why: '지정한 표적이 없습니다', run: () => actions.clearTarget() },
+          ];
+          if (me && TMM.Scope.canUse(game)) {
+            list.push({ sep: true });
+            list.push({ label: '탄종 전환', key: 'Q', desc: '철갑탄 ↔ 고폭탄을 바꿉니다', run: () => actions.cycleAmmo() });
+            list.push({ label: '조준 화면', key: 'Tab', desc: '조준경으로 직접 쏩니다 (그동안 무전 지휘 불가)', run: () => actions.toggleScope() });
+          }
+          return M.open(sx, sy, head, list);
+        }
+        const us = TMM.Command.recipients(game, cmd.to);
+        const name = TMM.Command.specName(game, cmd.to);
+        const none = !us.length;
+        const viaRadio = us.some((u) => u !== ctrlUnit());
+        const at = (mode, x, y) => () => { cmd.mode = mode; actions.mapClick(x, y); };
+        const list = [];
+        let x = info.x, y = info.y, sub = '';
+        // 표적: 목표 지정 (+ 그쪽 엄호)
+        const c = info.contactId != null ? I.contact(game, 'friend', info.contactId) : null;
+        if (c) {
+          x = c.visible ? c.unit.x : c.lastX;
+          y = c.visible ? c.unit.y : c.lastY;
+          const nm = I.displayName(c);
+          if (c.wreck) sub = nm + ' — 격파됨';
+          else if (c.identified && c.kind === 'friendly') sub = nm + ' — 아군, 사격 불가';
+          else {
+            sub = nm + (c.identified ? '' : ' — ⚠ 아직 식별 안 됨');
+            list.push({
+              label: c.identified ? '목표 지정' : '목표 지정 (미식별 ⚠)', key: 'T', danger: !c.identified,
+              desc: c.identified ? name + '이(가) 이 표적을 쏩니다' : '아군일 수도 있습니다 — 오인사격 위험',
+              disabled: none, why: '명령을 받을 전차가 없습니다',
+              run: () => { cmd.mode = null; actions.contactClick(c.unit.id); },
+            });
+            list.push(O('cover', { label: '이쪽 엄호', desc: '이 표적 쪽을 지켜보며 멈춥니다', disabled: none, why: '명령을 받을 전차가 없습니다', run: at('cover', x, y) }));
+            list.push({ sep: true });
+          }
+        }
+        // 땅: 이동 · 엄호 · 철수 (+ 엄호 이동 · 흑표)
+        const tinfo = game.map.infoAt(x, y);
+        const pass = !!(tinfo && tinfo.speed);
+        if (!sub) sub = tinfo ? tinfo.name + ' · ' + game.map.gridRef(x, y) : '';
+        const noGo = (tinfo ? tinfo.name : '작전 지역 밖') + ' — 전차가 갈 수 없는 곳';
+        if (!c || c.wreck || (c.identified && c.kind === 'friendly')) {
+          list.push(O('move', { disabled: none || !pass, why: none ? '명령을 받을 전차가 없습니다' : noGo, run: at('move', x, y) }));
+          list.push(O('cover', { label: '엄호 (이쪽 지켜봐)', disabled: none, why: '명령을 받을 전차가 없습니다', run: at('cover', x, y) }));
+          list.push(O('withdraw', { disabled: none || !pass, why: none ? '명령을 받을 전차가 없습니다' : noGo, run: at('withdraw', x, y) }));
+          list.push({ sep: true });
+        }
+        list.push(O('bound', { label: '엄호 이동 (소대 전체)', disabled: !pass, why: noGo, run: at('bound', x, y) }));
+        if (game.support) {
+          const a = TMM.Support.available(game);
+          list.push(O('support', { label: '흑표 지원 요청', disabled: !a.ok, why: a.why, run: () => { actions.pickOrder('support'); if (cmd.mode === 'support') actions.mapClick(x, y); } }));
+        }
+        return M.open(sx, sy, { title: name + '에게' + (none ? '' : viaRadio ? ' · 무전' : ' · 바로 실행'), sub }, list);
       },
       // 명령 버튼·단축키. 위치·표적이 필요한 명령은 지도 클릭을 기다린다.
       pickOrder(id) {
@@ -188,6 +280,7 @@
         issue({ type: 'roe', roe });
       },
       cancel() {
+        if (TMM.ContextMenu.isOpen()) return TMM.ContextMenu.close();
         if (cmd.mode) cmd.mode = null;
         else game.selectedId = null;
       },
@@ -272,6 +365,7 @@
       // ---- M6 조준 화면 ----
       toggleScope() {
         if (game.over) return;
+        TMM.ContextMenu.close();
         if (scoped()) return closeScope();
         if (!TMM.Scope.canUse(game)) {
           toast('소대장이 탄 전차가 없어 조준 화면을 쓸 수 없습니다.', 'warn');
@@ -367,7 +461,9 @@
       },
     };
 
+    TMM.Layout.attach(game);
     TMM.RadioLog.init(document.getElementById('radio-log'));
+    TMM.ContextMenu.init({ onHover: (t) => TMM.CommandBar.setTip(t) });
     TMM.Panel.init(game, actions.select);
     TMM.CommandBar.init(game, actions);
     TMM.Result.init();
@@ -394,7 +490,7 @@
         const heavy = ['track', 'engine'].filter((k) => u.damage[k]).map((k) => TMM.PARTS[k].name);
         if (heavy.length) log('체계', u.callsign + ' — 지난 작전의 ' + heavy.join('·') + ' 손상이 남아 있습니다' + (u.damage.track ? ' (이동 불가)' : ' (속도 절반)') + '.', 'warn');
       }
-    } else {
+    } else if (!game.tutorial) {
       log('체계', '작전 지도 로드 완료. K1A2 전차 4대 주둔지 대기 중. ' + TMM.LIGHT[light].name + ' 작전.', 'system');
     }
 
@@ -474,13 +570,15 @@
       }
     }
 
-    if (camp) {
+    if (game.tutorial) {
+      TMM.Tutorial.start(game, { log, toast });
+    } else if (camp) {
       for (const t of game.op.intro) log(TMM.RADIO.COMPANY, t, 'system');
     } else {
       log(TMM.RADIO.COMPANY, '강철, 여기 강철 6. 적 천마호 전차 1개 소대(4대), 매봉 능선·새터읍 일대에서 남하 중. 강철은 주둔지를 지키며 저지하라. 이상.', 'system');
       log(TMM.RADIO.COMPANY, '전방 저수지 동쪽 숲에 아군 보병 분대(관측초소)와 보급 트럭이 있다. 둘 다 피아식별장치 없음 — 식별 전 사격 주의. 이상.', 'system');
     }
-    log('체계', '1호차는 직접 조작, 2·3·4호차는 무전으로 지휘합니다. 오른쪽 위 [무전 지휘] 창에서 받는 대상과 명령을 고르십시오.', 'system');
+    if (!game.tutorial) log('체계', '1호차는 직접 조작, 2·3·4호차는 무전으로 지휘합니다. 전차 아이콘이나 [1조]·[2조]·[소대 전체]로 고르고, 지도를 우클릭해 명령하십시오. 조작이 헷갈리면 F1.', 'system');
 
     // M6: 교신 두절 감시 (조준 화면 경고)
     const linkWas = new Map();
@@ -544,6 +642,7 @@
       else TMM.Renderer.drawFrame(ctx, view, game, terrain, now / 1000);
       TMM.Panel.update(game);
       TMM.CommandBar.update(game);
+      if (game.tutorial) TMM.Tutorial.update(game);
       if (game.op && now - hudAt > 250) { hudAt = now; updateHud(); }
       requestAnimationFrame(frame);
     }

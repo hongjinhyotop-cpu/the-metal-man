@@ -41,6 +41,7 @@ TMM.Panel = (function () {
     els.banner = document.getElementById('pause-banner');
     els.cursor = document.getElementById('cursor-readout');
     els.enemies = document.getElementById('enemy-roster');
+    els.cbadge = document.getElementById('contact-badge');
 
     // 소대 현황 목록
     els.rows = {};
@@ -288,6 +289,13 @@ TMM.Panel = (function () {
     }
     if (!list.length) html = '<li class="none">아직 탐지한 표적 없음</li>';
     set(els.enemies, 'contacts', html, true);
+    // M7.5: 접힌 칸 제목에 한 줄 요약 (보이는 적 · 미상 · 놓침)
+    const live = list.filter((c) => !c.wreck && c.kind !== 'friendly');
+    const vis = live.filter((c) => c.visible && c.identified).length;
+    const unk = live.filter((c) => !c.identified).length;
+    const lost = live.filter((c) => !c.visible && c.identified).length;
+    const badge = live.length ? [vis ? '보이는 적 ' + vis : '', unk ? '미상 ' + unk : '', lost ? '놓침 ' + lost : ''].filter(Boolean).join(' · ') : '탐지한 적 없음';
+    if (els.cbadge) set(els.cbadge, 'cbadge', badge);
 
     const kills = game.enemies.filter((e) => e.destroyed && !e.abandoned).length;
     const aband = game.enemies.filter((e) => e.abandoned).length;
@@ -305,7 +313,7 @@ TMM.Panel = (function () {
     if (sel) {
       set(els.info, 'info', unitInfoHTML(game, sel), true);
     } else {
-      set(els.info, 'info', '<p class="empty">지도에서 전차를 클릭하거나<br>숫자키 1~4 를 눌러 선택하십시오.</p>', true);
+      set(els.info, 'info', '<p class="empty">지도에서 전차 아이콘을 클릭해 고르십시오.</p>', true);
     }
 
     for (const u of game.units) {
@@ -338,15 +346,17 @@ TMM.Panel = (function () {
     const runKey = (game.over ? 'o' : game.paused ? 'p' : 'r' + game.speedMult) + (game.combat ? 'c' : '') + (game.started ? 's' : '');
     if (cache.get('run') !== runKey) {
       cache.set('run', runKey);
-      els.run.textContent = game.over ? '작전 종료' : game.paused ? '일시정지' : (game.combat ? '교전 중' : '진행 중') + ' ×' + game.speedMult;
-      els.run.title = game.combat ? '교전 중에는 시간이 느리게 흐릅니다 (실제 1초 = 게임 ' + TMM.CONFIG.COMBAT_TIME_SCALE + '초)' : '';
+      // M7.5: 상태 표시가 곧 일시정지/재개 단추
+      els.run.innerHTML = game.over ? '작전 종료' : (game.paused ? (game.started ? '▶ 재개' : '▶ 작전 개시') : '❚❚ ' + (game.combat ? '교전 중' : '진행 중') + ' ×' + game.speedMult) + ' <kbd>Space</kbd>';
+      els.run.title = (game.paused ? '누르면 진행 (스페이스바)' : '누르면 일시정지 (스페이스바)') + (game.combat ? ' · 교전 중에는 시간이 느리게 흐릅니다 (실제 1초 = 게임 ' + TMM.CONFIG.COMBAT_TIME_SCALE + '초)' : '');
+      els.run.disabled = !!game.over;
       els.run.classList.toggle('paused', game.paused || !!game.over);
       els.run.classList.toggle('combat', game.combat && !game.paused && !game.over);
       els.banner.hidden = !game.paused || !!game.over;
       els.banner.querySelector('.pb-title').textContent = game.started ? '일시정지' : '작전 대기';
       els.banner.querySelector('.pb-hint').textContent = game.started
-        ? '스페이스바를 누르면 재개합니다 · 정지 중 내린 무전 명령은 재개하면 전달됩니다'
-        : '스페이스바를 누르면 작전을 개시합니다 · 지금 미리 무전 명령을 내려 둘 수 있습니다';
+        ? '위의 [▶ 재개] 또는 스페이스바 · 정지 중 내린 무전 명령은 재개하면 전달됩니다'
+        : '위의 [▶ 작전 개시] 또는 스페이스바 · 지금 미리 명령을 내려 둘 수 있습니다';
       document.querySelectorAll('[data-speed]').forEach((b) => {
         b.classList.toggle('active', Number(b.dataset.speed) === game.speedMult);
       });
@@ -355,13 +365,13 @@ TMM.Panel = (function () {
     const sightKey = game.showSight ? 'on' : 'off';
     if (cache.get('sight') !== sightKey) {
       cache.set('sight', sightKey);
-      els.sightBtn.textContent = game.showSight ? '시야 표시 켜짐 (V)' : '시야 표시 꺼짐 (V)';
+      els.sightBtn.innerHTML = (game.showSight ? '시야 표시 켜짐' : '시야 표시 꺼짐') + ' <kbd>V</kbd>';
       els.sightBtn.classList.toggle('on', game.showSight);
     }
 
     // 커서 아래 지형
     const h = game.hover;
-    let txt = '커서를 지도 위에 올리면 지형 정보가 표시됩니다';
+    let txt = '';
     const c = game.hoverContactId != null ? TMM.Intel.contact(game, 'friend', game.hoverContactId) : null;
     if (c) {
       txt = contactLine(game, c).replace(/<[^>]+>/g, '');
@@ -375,8 +385,6 @@ TMM.Panel = (function () {
         if (!sees) txt += ' · 본 차에서 안 보임';
         else if (!inR) txt += ' · 사거리 밖';
         else txt += ' · 명중 예상 ' + Math.round(TMM.Ballistics.hitChance(game.map, sel, c.unit, sel.ammoType, TMM.Intel.fireMods(game, sel, c.unit)) * 100) + '%';
-        const to = TMM.Command.specName(game, game.cmd.to);
-        txt += c.identified ? ' · 클릭하면 ' + to + '에게 목표 지정' : ' · ⚠ 미식별 — 클릭하면 오인사격 위험을 안고 ' + to + '에게 목표 지정';
       }
     } else if (h) {
       const info = game.map.infoAt(h.x, h.y);
