@@ -92,6 +92,10 @@ TMM.Command = (function () {
       } else {
         const r = TMM.Orders.execute(game, direct, o);
         const who = alone ? name : name + ' (차내)';
+        if (r.ok && TMM.Crew) {
+          TMM.Crew.onExecuted(game, direct, o);
+          TMM.Crew.onDirectOrder(game, direct, o, lines); // M5: 박성훈 병장의 투덜거림 등
+        }
         if (!r.ok) line(who, '불가 — ' + r.reason + '.', 'warn');
         else if ((o.type === 'move' || o.type === 'withdraw') && r.res) {
           line(who, '수신. ' + (o.type === 'withdraw' ? '후진 철수' : '이동') + ' 개시. 거리 ' + (r.res.meters / 1000).toFixed(1) + 'km, ' + TMM.Clock.duration(r.res.eta) + ' 소요 예상.', 'report');

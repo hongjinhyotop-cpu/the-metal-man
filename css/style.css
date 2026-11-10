@@ -614,3 +614,70 @@ button {
   .cmd-to { grid-template-columns: repeat(4, 1fr); }
   .brand-sub { display: none; }
 }
+
+/* ---------- M5 승무원과 신뢰도 ---------- */
+.crew { margin-bottom: 8px; display: grid; gap: 5px; }
+.trust {
+  display: grid;
+  grid-template-columns: 44px 1fr 26px auto;
+  column-gap: 8px;
+  row-gap: 2px;
+  align-items: center;
+  padding: 5px 8px;
+  border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--team-2);
+  background: var(--panel);
+  font-size: 12.5px;
+}
+.trust.low { border-left-color: var(--warn); }
+.trust.high { border-left-color: var(--ok); }
+.tr-k { color: var(--text-faint); }
+.tr-bar { height: 6px; background: var(--line-soft); }
+.tr-bar i { display: block; height: 100%; background: var(--team-2); }
+.trust.low .tr-bar i { background: var(--warn); }
+.trust.high .tr-bar i { background: var(--ok); }
+.tr-v { font-weight: 700; text-align: right; }
+.tr-l { font-weight: 600; }
+.tr-why { grid-column: 1 / 5; font-size: 11.5px; }
+.trust .sub { color: var(--text-dim); font-weight: 400; }
+.crew-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.cw {
+  padding: 4px 6px 5px;
+  border: 1px solid var(--line-soft);
+  background: var(--panel);
+  font-size: 12px;
+  min-width: 0;
+}
+.cw.hurt1 { border-color: var(--accent); }
+.cw.hurt2 { border-color: var(--enemy); background: rgba(224, 86, 63, 0.1); }
+.cw.dead { opacity: 0.6; }
+.cw-head { display: flex; justify-content: space-between; gap: 4px; }
+.cw-role { color: var(--text-faint); font-size: 11px; letter-spacing: 0.05em; }
+.cw-st { font-family: var(--mono); font-size: 10.5px; font-weight: 700; padding: 0 3px; border: 1px solid currentColor; }
+.cw-st.bad { color: #ff7a60; }
+.cw-st.warn { color: var(--accent); }
+.cw-st.dim { color: var(--text-dim); }
+.cw-name { font-weight: 700; font-size: 13px; margin: 1px 0 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cw-name .sub { color: var(--text-dim); font-weight: 400; font-size: 11.5px; }
+.cw-stats { display: grid; grid-template-columns: 24px 1fr 20px; column-gap: 4px; row-gap: 2px; align-items: center; }
+.cw-k { color: var(--text-faint); font-size: 10.5px; }
+.cw-na { grid-column: 2 / 4; font-size: 10.5px; }
+.cw-bar { height: 4px; background: var(--line-soft); }
+.cw-bar i { display: block; height: 100%; }
+.cw-bar.sk i { background: var(--accent); }
+.cw-bar.ft i { background: var(--warn); }
+.cw-bar.mo i { background: var(--ok); }
+.cw-n { font-size: 10.5px; text-align: right; color: var(--text-dim); }
+
+.radio-log .log-crew b { color: #c9b98a; font-weight: 600; }
+.radio-log .log-crew span { color: #b9b394; font-style: italic; }
+.radio-log .log-trust-up b, .radio-log .log-trust-up span { color: var(--ok); }
+.radio-log .log-trust-down b, .radio-log .log-trust-down span { color: var(--warn); }
+
+.r-box { max-height: calc(100% - 32px); overflow-y: auto; }
+.r-crew-title { font-family: var(--mono); font-size: 12px; letter-spacing: 0.2em; color: var(--text-faint); border-top: 1px dashed var(--line-soft); padding-top: 8px; }
+.r-crew { list-style: none; margin: 4px 0 14px; padding: 0; font-size: 12px; display: grid; gap: 2px; max-width: 560px; }
+.r-crew li { color: var(--text-dim); padding-left: 8px; border-left: 3px solid var(--team-1); }
+.r-crew li.team-2 { border-left-color: var(--team-2); }
+.r-crew li.hurt { color: #ff9a80; }
+.r-crew li.r-crew-head { color: var(--text); font-weight: 700; margin-top: 4px; border-left-width: 6px; }

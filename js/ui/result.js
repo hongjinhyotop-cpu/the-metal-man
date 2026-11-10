@@ -57,6 +57,26 @@ TMM.Result = (function () {
       li.textContent = u.callsign + ' — ' + TMM.Damage.summary(u) + ' · 잔탄 ' + TMM.Damage.totalAmmo(u) + '발 · 적 격파 ' + u.stats.kills + '대';
       ul.appendChild(li);
     }
+
+    // M5: 승무원별 한 줄 요약
+    const cu = el.querySelector('.r-crew');
+    cu.innerHTML = '';
+    if (TMM.Crew) {
+      let lastUnit = null;
+      for (const s of TMM.Crew.summaries(game)) {
+        if (s.unit !== lastUnit) {
+          lastUnit = s.unit;
+          const h = document.createElement('li');
+          h.className = 'r-crew-head team-' + s.unit.team;
+          h.textContent = s.unit.callsign + (s.unit.crew.trust != null ? ' · 신뢰도 ' + Math.round(s.unit.crew.trust) + ' (' + TMM.Crew.trustLabel(s.unit.crew.trust) + ')' : ' · 소대장차');
+          cu.appendChild(h);
+        }
+        const li = document.createElement('li');
+        li.className = 'team-' + s.unit.team + (s.member.injury >= 2 ? ' hurt' : '');
+        li.textContent = s.text;
+        cu.appendChild(li);
+      }
+    }
     el.hidden = false;
   }
 

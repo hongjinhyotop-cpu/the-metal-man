@@ -3,8 +3,8 @@
  * 모두 게임용 추정치이며, 시간은 '게임 초'다 (교전 중 실제 1초 = 게임 3초).
  *
  * M5(승무원과 신뢰도) 연결점:
- *   TMM.RADIO.crewFactor(unit, what) 가 지금은 항상 1 을 돌려준다.
- *   M5 에서 승무원 숙련도·성격·신뢰도에 따라 이 함수만 바꾸면 오청 확률·응답 지연·보고 지연·스스로 판단하는 정도가 달라진다.
+ *   TMM.RADIO.crewFactor(unit, what) 는 TMM.Crew.radioFactor 를 부른다 (전차장 숙련도·피로·사기·부상 + 소대장에 대한 신뢰도).
+ *   오청 확률·응답 지연·보고 지연·스스로 판단하는 정도가 전차마다 달라진다.
  *     what: 'mishear'(잘못 알아들을 확률 배수) | 'ack'(수신 응답 지연 배수) | 'report'(보고 지연 배수)
  *           | 'initiative'(피격 시 스스로 엄폐물로 움직일 확률 배수)
  */
@@ -25,7 +25,7 @@ TMM.RADIO = {
   STALE_SEC: 25, // 무전망이 붐벼 이만큼 밀린 일상 보고(중요도 0~1)는 버린다
   MAX_RETRY: 3, // 잡음으로 다시 보내는 최대 횟수
 
-  // ---- 잘못 알아들음 (지금은 고정값. M5 에서 crewFactor 로 승무원과 연결) ----
+  // ---- 잘못 알아들음 (기본값. M5: crewFactor 로 전차장 숙련도·신뢰도에 따라 0.3~2.5배) ----
   MISHEAR_P: 0.07,
   MISHEAR_OFFSET_CELLS: [5, 9], // 위치를 잘못 알아들으면 이만큼(칸, 1칸 50m) 다른 곳으로 간다
 
@@ -69,7 +69,7 @@ TMM.RADIO = {
   FREE_UNKNOWN_M: 1500, // 자유 사격 때 미상 표적을 쏘는 최대 거리
 
   crewFactor(unit, what) {
-    return 1; // M5: 승무원 숙련도·신뢰도·성격으로 바꾼다
+    return TMM.Crew ? TMM.Crew.radioFactor(unit, what) : 1; // M5: 전차장 숙련도·피로·사기·부상 + 신뢰도 (js/crew/crew.js)
   },
 };
 

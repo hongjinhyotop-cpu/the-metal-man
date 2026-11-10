@@ -23,7 +23,8 @@ TMM.Damage = (function () {
   const totalAmmo = (u) => Object.values(u.ammo).reduce((s, v) => s + v, 0);
   const canMove = (u) => !u.destroyed && !u.damage.track;
   const canFire = (u) => !u.destroyed && !u.damage.gun && totalAmmo(u) > 0;
-  const speedMul = (u) => (u.damage.engine ? TMM.DAMAGE_EFFECT.engineSpeedMul : 1);
+  // M5: 조종수 실력도 곱한다
+  const speedMul = (u) => (u.damage.engine ? TMM.DAMAGE_EFFECT.engineSpeedMul : 1) * (u.crew && TMM.Crew ? TMM.Crew.speedMul(u) : 1);
   const damagedParts = (u) => TMM.PART_KEYS.filter((k) => u.damage[k]);
 
   // 판정 결과를 표적에 적용. 새로 손상된 부위 목록을 돌려준다.

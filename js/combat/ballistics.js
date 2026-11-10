@@ -52,6 +52,7 @@ TMM.Ballistics = (function () {
     if (isMoving(target)) p *= veh.targetMoveMul;
     if (shooter.damage.fcs) p *= TMM.DAMAGE_EFFECT.fcsHitMul;
     p *= TMM.VEHICLES[target.model].size || 1;
+    if (shooter.crew && TMM.Crew) p *= TMM.Crew.hitMul(shooter, d); // M5: 포수 실력
     if (mods) {
       const V = TMM.VISION;
       if (mods.hullDown) p *= V.HULL_DOWN_HIT;

@@ -1,6 +1,6 @@
 /*
  * 전투 한 틱 진행: 무전망(명령 전달) → 이동 → 아군(비지휘) 행동 → 시야·식별 → 명령 수행·엄호 이동 → 적 AI → 사격
- *                → 피격 시 스스로 판단 → 자동 보고 → 승패 판정.
+ *                → 승무원(피로·고장·잡담) → 피격 시 스스로 판단 → 승무원 사건(부상·사기·신뢰도) → 자동 보고 → 승패 판정.
  * main.js 의 주 루프와 시험용 모의 전투가 같은 코드를 쓴다.
  * 반환: 이번 틱에 일어난 사건 배열 (무전 기록·화면 효과용)
  *
@@ -29,6 +29,7 @@ TMM.Battle = (function () {
     TMM.Intel.init(game);
     TMM.Orders.init(game);
     TMM.Radio.init(game);
+    TMM.Crew.init(game, opts && opts.crew); // M5 승무원·신뢰도 (opts.crew: 이전 전투의 TMM.Crew.snapshot)
     return game;
   }
 
@@ -47,7 +48,9 @@ TMM.Battle = (function () {
     TMM.Orders.update(game, gdt);
     TMM.EnemyAI.update(game, gdt, events);
     TMM.Gunnery.update(game, gdt, events);
+    TMM.Crew.update(game, gdt, events);
     TMM.Orders.onEvents(game, events);
+    TMM.Crew.onEvents(game, events);
     TMM.Radio.onEvents(game, events);
     for (const ev of events) {
       if (ev.type === 'shot') {
@@ -61,6 +64,7 @@ TMM.Battle = (function () {
       else if (game.units.filter((u) => u.destroyed).length >= TMM.CONFIG.PLATOON_LOSS_FAIL) game.over = { win: false, at: game.gameSeconds };
       if (game.over) {
         for (const u of game.units.concat(game.enemies)) u.fire.targetId = null;
+        TMM.Crew.finish(game, events);
         events.push({ type: 'over', win: game.over.win });
       }
     }

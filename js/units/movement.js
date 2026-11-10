@@ -32,6 +32,7 @@ TMM.Movement = (function () {
     unit.state = 'idle';
     unit.speedKmh = 0;
     unit.reverseM = 0;
+    unit.stall = 0;
   }
 
   /**
@@ -39,6 +40,12 @@ TMM.Movement = (function () {
    */
   function update(map, unit, dt) {
     if (unit.state !== 'moving' || !unit.path.length) {
+      unit.speedKmh = 0;
+      return false;
+    }
+    if (unit.stall > 0) {
+      // M5: 고장 정비 조치 중 (조종수)
+      unit.stall = Math.max(0, unit.stall - dt);
       unit.speedKmh = 0;
       return false;
     }

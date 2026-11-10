@@ -1,6 +1,6 @@
 /*
  * 무전 기록 창. (M4 무전 지휘에서 확장 예정)
- * kind: 'order' 지시 | 'report' 보고 | 'warn' 경고 | 'system' 체계
+ * kind: 'order' 지시 | 'report' 보고 | 'warn' 경고 | 'system' 체계 | 'crew' 승무원 말 (M5) | 'trust-up'·'trust-down' 신뢰도 변화 (M5)
  */
 TMM.RadioLog = (function () {
   let listEl = null;

@@ -26,6 +26,7 @@ TMM.Panel = (function () {
 
   function stateText(game, u) {
     if (u.destroyed) return '격파됨';
+    if (u.stall > 0) return '정비 조치 중 ' + Math.ceil(u.stall) + '초';
     if (u.state === 'moving') return game.paused ? '이동 중 (일시정지)' : '이동 중';
     return '정지';
   }
@@ -119,8 +120,47 @@ TMM.Panel = (function () {
       '<span class="u-num">' + u.id + '</span>' +
       '<div><div class="u-call">' + esc(u.callsign) + ' <span class="u-radio">' + esc(TMM.RADIO.call(u)) + '</span></div>' +
       '<div class="u-sub">' + esc(u.model) + ' · ' + esc(u.role) + ' · ' + esc(team.name) + '</div></div>' +
-      '</div>' + combat + '<dl class="kv">' + rows.join('') + '</dl>'
+      '</div>' + crewHTML(game, u) + combat + '<dl class="kv">' + rows.join('') + '</dl>'
     );
+  }
+
+  // M5: 승무원 카드 4장 + 신뢰도 막대 (2·3·4호차)
+  function bar(cls, v, title) {
+    const n = Math.round(v);
+    return '<span class="cw-bar ' + cls + '" title="' + title + ' ' + n + '"><i style="width:' + n + '%"></i></span><span class="cw-n mono">' + n + '</span>';
+  }
+  function crewHTML(game, u) {
+    if (!u.crew || !TMM.Crew) return '';
+    const out = ['<div class="crew">'];
+    const t = u.crew.trust;
+    if (t != null) {
+      const d = Math.round(t - u.crew.trustStart);
+      const last = u.crew.trustLog[u.crew.trustLog.length - 1];
+      out.push('<div class="trust' + (t < 35 ? ' low' : t >= 70 ? ' high' : '') + '">' +
+        '<span class="tr-k">신뢰도</span>' +
+        '<span class="tr-bar"><i style="width:' + Math.round(t) + '%"></i></span>' +
+        '<span class="tr-v mono">' + Math.round(t) + '</span>' +
+        '<span class="tr-l">' + esc(TMM.Crew.trustLabel(t)) + (d ? ' <span class="sub">(' + (d > 0 ? '+' : '') + d + ')</span>' : '') + '</span>' +
+        (last ? '<span class="tr-why sub">최근: ' + esc(last.reason) + ' ' + (last.delta > 0 ? '+' : '') + last.delta + '</span>' : '<span class="tr-why sub">소대장을 얼마나 믿는가 · 높으면 빨리·정확히 따름</span>') +
+        '</div>');
+    }
+    out.push('<div class="crew-cards">');
+    for (const role of TMM.CREW_ROLE_ORDER) {
+      const m = u.crew.byRole[role];
+      if (!m) continue;
+      const st = TMM.Crew.statusWord(m);
+      const stCls = m.injury >= 2 ? 'bad' : m.injury || m.shaken ? 'warn' : st ? 'dim' : '';
+      out.push('<div class="cw' + (m.injury >= 2 ? ' hurt2' : m.injury ? ' hurt1' : '') + (u.destroyed ? ' dead' : '') + '" title="' + esc(m.about + ' · ' + TMM.CREW_ROLES[role].effect) + '">' +
+        '<div class="cw-head"><span class="cw-role">' + esc(TMM.CREW_ROLES[role].name) + '</span>' + (st ? '<span class="cw-st ' + stCls + '">' + esc(st) + '</span>' : '') + '</div>' +
+        '<div class="cw-name">' + esc(m.player ? '소대장 (나)' : m.name) + ' <span class="sub">' + esc(m.rank) + '</span></div>' +
+        '<div class="cw-stats">' +
+        (m.player ? '<span class="cw-k">숙련</span><span class="cw-na sub">직접 조작</span>' : '<span class="cw-k">숙련</span>' + bar('sk', m.skill, '숙련도')) +
+        '<span class="cw-k">피로</span>' + bar('ft', m.fatigue, '피로') +
+        '<span class="cw-k">사기</span>' + bar('mo', m.morale, '사기') +
+        '</div></div>');
+    }
+    out.push('</div></div>');
+    return out.join('');
   }
 
   // 차체 엄폐 문구: 보이는 적 기준
@@ -266,7 +306,9 @@ TMM.Panel = (function () {
 
     for (const u of game.units) {
       const r = els.rows[u.id];
-      set(r.state, 'rs' + u.id, stateText(game, u) + ' · ' + game.map.infoAt(u.x, u.y).name + ' · 잔탄 ' + TMM.Damage.totalAmmo(u));
+      const hurtN = u.crew ? u.crew.members.filter((m) => m.injury).length : 0;
+      set(r.state, 'rs' + u.id, stateText(game, u) + ' · ' + game.map.infoAt(u.x, u.y).name + ' · 잔탄 ' + TMM.Damage.totalAmmo(u) +
+        (u.crew && u.crew.trust != null ? ' · 신뢰 ' + Math.round(u.crew.trust) : '') + (hurtN ? ' · 부상 ' + hurtN : ''));
       const ls = TMM.Radio.linkState(game, u);
       const pend = TMM.Radio.pendingFor(game, u.id).length;
       set(r.cmd, 'rcmd' + u.id, '<span class="lk lk-' + ls.code + '"></span>' + esc(TMM.Orders.describe(game, u)) + ' · ' + esc(TMM.RADIO.ROE[u.roe].short) +

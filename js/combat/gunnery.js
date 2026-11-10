@@ -72,7 +72,9 @@ TMM.Gunnery = (function () {
     for (const t of allTargets(game, unit)) {
       if (t.destroyed || t.exited) continue;
       const c = I().contact(game, side, t.id);
-      const unknown = roe === 'free' && c && !c.identified;
+      // M5: 3호차 윤지호 하사는 긴장해서 식별이 거의 끝난 미상 표적을 먼저 쏠 때가 있다 (조기 사격)
+      const early = roe === 'id' && side === 'friend' && unit.crew && c && !c.identified && TMM.Crew.earlyFire(game, unit, c, B().distanceM(game.map, unit, t));
+      const unknown = (roe === 'free' || early) && c && !c.identified;
       if (!unknown && !I().isHostile(c)) continue;
       const cls = TMM.VEHICLES[t.model].cls;
       if (side === 'enemy' && cls === 'infantry') continue;
@@ -114,7 +116,7 @@ TMM.Gunnery = (function () {
     if (!target) { f.targetId = null; return; }
     if (f.targetId !== target.id) {
       f.targetId = target.id;
-      f.aim = TMM.VEHICLES[unit.model].aimSec;
+      f.aim = TMM.VEHICLES[unit.model].aimSec * (TMM.Crew ? TMM.Crew.aimMul(unit) : 1); // M5: 포수
     } else {
       f.aim = Math.max(0, f.aim - gdt);
     }
@@ -137,7 +139,7 @@ TMM.Gunnery = (function () {
     unit.ammo[ammoId] -= 1;
     unit.stats.shots += 1;
     unit.lastFiredAt = game.gameSeconds;
-    f.reload = veh.reloadSec;
+    f.reload = veh.reloadSec * (TMM.Crew ? TMM.Crew.reloadMul(unit) : 1); // M5: 탄약수
     const res = B().resolveShot(game.map, unit, target, ammoId, rand, I().fireMods(game, unit, target));
     if (res.hit) unit.stats.hits += 1;
     const fresh = D().apply(target, res);
@@ -149,6 +151,7 @@ TMM.Gunnery = (function () {
       f.targetId = null;
       I().reveal(game, unit.side, target, null, 'ff');
     }
+    if (TMM.Crew && unit.crew) TMM.Crew.afterShot(game, unit, res, events); // M5: 성장·탄종 실수
     events.push({ type: 'shot', shooter: unit, target, ammoId, res, fresh, unidentified, friendlyFire });
   }
 

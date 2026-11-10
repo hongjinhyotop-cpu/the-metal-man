@@ -84,7 +84,7 @@ TMM.Intel = (function () {
     if (!los.clear) return null;
     if (d > r * (1 - 0.5 * los.obs)) return null; // 숲 사이로 희미하게 보이면 탐지 거리가 줄어든다
     const obs = los.obs + idObs;
-    const idTime = sens.idBase * (0.4 + d / 1000) * (1 + 2 * obs) * sig.id * idMul;
+    const idTime = sens.idBase * (0.4 + d / 1000) * (1 + 2 * obs) * sig.id * idMul * (o.crew && TMM.Crew ? TMM.Crew.idMul(o) : 1); // M5: 전차장 식별 속도
     return { d, obs, hullDown: los.hullDown && !moving(t) && TMM.VEHICLES[t.model].cls === 'tank', idTime };
   }
 

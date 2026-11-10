@@ -181,6 +181,7 @@ TMM.Radio = (function () {
     const text = toName + ', 여기 ' + call(ctrl) + '. ' + (attempt ? '반복한다. ' : '') + O().phrase(game, order, ctx) + '. 이상.';
     const net = game.radio;
     for (const u of units) net.pending.set(pkey(u, order), { unitId: u.id, order, state: 'queued', at: game.gameSeconds, ctx });
+    if (TMM.Crew && !attempt) for (const u of units) TMM.Crew.noteOrder(game, u, order, ctx.events || null); // M5: 명령 번복 → 신뢰도
     push(game, {
       fromName: call(ctrl),
       text,
@@ -244,20 +245,38 @@ TMM.Radio = (function () {
         continue;
       }
       const heard = mishear(game, u, order, ctx);
+      // M5: 장만석 상사는 신뢰가 낮으면 이동 위치를 근처 더 나은 엄폐물로 '해석'한다
+      const interp = TMM.Crew ? TMM.Crew.interpret(game, u, heard.order) : null;
+      if (interp) heard.order = interp.order;
       const why = O().check(game, u, heard.order);
-      const body = why ? '수신. 그러나 ' + why + '.' : '수신. ' + O().readback(game, u, heard.order, heard.ctx) + '.';
+      const rb = O().readback(game, u, heard.order, heard.ctx);
+      const body = why ? '수신. 그러나 ' + why + '.' : TMM.Crew ? TMM.Crew.ackBody(game, u, rb, heard.order, interp) : '수신. ' + rb + '.';
+      // M5: 되묻기(최민수 중사)·머뭇거림(낮은 신뢰)·차내 갈등(3호차) → 응답이 늦어진다
+      const pre = TMM.Crew ? TMM.Crew.beforeAck(game, u, heard.order, heard.ctx) : { delay: 0, ask: null, mic: [] };
+      const ackAt = game.gameSeconds + between(game, R().ACK_DELAY_SEC) * R().crewFactor(u, 'ack');
+      if (pre.ask) {
+        push(game, {
+          fromName: call(u), fromUnit: u, noGarble: true,
+          text: call(ctrl) + ', 여기 ' + call(u) + '. ' + pre.ask + ' 이상.',
+          kind: 'report', prio: 3, readyAt: ackAt, check: () => !u.destroyed,
+        });
+      }
       p.state = 'ack';
       push(game, {
         fromName: call(u),
         text: call(u) + ', ' + body,
         kind: why ? 'warn' : 'report',
         prio: 3,
-        readyAt: game.gameSeconds + between(game, R().ACK_DELAY_SEC) * R().crewFactor(u, 'ack'),
+        readyAt: ackAt + pre.delay,
         check: () => !u.destroyed,
         onDrop: () => fail(game, u, order),
         onDone: (ev) => {
           const q = net.pending.get(pkey(u, order));
           if (!q || q.order !== order) return;
+          for (const [key, text] of pre.mic) {
+            const m = u.crew && u.crew.members.find((x) => x.key === key);
+            if (m) emit(ev, u.id + '호차 ' + m.name + ' ' + m.rank, text, 'crew');
+          }
           if (heard.wrong) emit(ev, '복창 확인', '⚠ ' + call(u) + ' 복창이 지시와 다름 — 잘못 알아들었다. 다시 지시할 것.', 'warn');
           q.state = 'exec';
           later(game, R().EXEC_DELAY_SEC, (ev2) => {
@@ -267,6 +286,7 @@ TMM.Radio = (function () {
             if (why) { if (order.type === 'bound') O().leaveBound(game, u); return; }
             const r = O().execute(game, u, heard.order);
             if (!r.ok) emit(ev2, call(u), call(ctrl) + ', 여기 ' + call(u) + '. ' + r.reason + '. 이상.', 'warn');
+            else if (TMM.Crew) TMM.Crew.onExecuted(game, u, heard.order);
           });
         },
       });
@@ -424,7 +444,11 @@ TMM.Radio = (function () {
         const what = list.every((c) => c.identified) ? '적 ' + list.length : '미상 표적 ' + list.length;
         parts.push(k + ' ' + what + ' (' + names.join('·') + (list.length === 1 ? ', ' + km(list[0].dist) : '') + ')');
       }
-      if (parts.length) report(game, u, parts.join(', ') + '.', { prio: 1 }, events);
+      if (parts.length) {
+        const allUnknown = b.list.every((c) => !c.identified);
+        const body = parts.join(', ') + '.';
+        report(game, u, TMM.Crew ? TMM.Crew.spotLine(game, u, body, allUnknown) : body, { prio: 1 }, events);
+      }
       if (friends.length) report(game, u, friends.join(', ') + ' — 피아식별 응답, 아군.', { prio: 0 }, events);
     }
   }
