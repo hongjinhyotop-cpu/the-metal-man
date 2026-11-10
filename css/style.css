@@ -275,6 +275,9 @@ button {
 .radio-log .log-fire span { color: var(--text); }
 .radio-log .log-kill b, .radio-log .log-kill span { color: #ffd36a; font-weight: 600; }
 .radio-log .log-loss b, .radio-log .log-loss span { color: #ff6a50; font-weight: 700; }
+/* M8a: 포격·미사일·드론 경고 — 주황 막대 + 옅은 바탕 */
+.radio-log .log-threat { background: rgba(200, 90, 30, 0.22); border-left: 3px solid #ff9a3c; padding-left: 4px; }
+.radio-log .log-threat b, .radio-log .log-threat span { color: #ffc27a; font-weight: 700; }
 
 /* 전투 상태 (선택 전차) */
 .combat {
@@ -787,6 +790,13 @@ button {
 .c-press { margin: 10px 0 0; padding: 6px 10px; border: 1px solid var(--warn); color: var(--warn); font-size: 12.5px; }
 .c-tip { margin: 10px 0 0; padding: 6px 10px; background: var(--panel); border-left: 3px solid var(--team-2); font-size: 12.5px; color: var(--text-dim); }
 .c-tip b { color: var(--team-2); margin-right: 6px; }
+/* M8a 작전 명령: 새 위협과 장만석 상사의 대응 한 줄씩 */
+.c-threats { margin: 0; padding-left: 16px; }
+.c-threats li { margin: 2px 0; }
+.c-threats b { color: #ffc27a; }
+.c-tips { margin: 4px 0 0; padding: 4px 10px 6px 26px; background: var(--panel); border-left: 3px solid var(--team-2); font-size: 12.5px; color: var(--text-dim); }
+.c-tips li { margin: 2px 0; }
+.c-tips b { color: #ffc27a; margin-right: 4px; }
 .c-map { display: block; width: 100%; border: 1px solid var(--line); background: #1a2013; }
 .c-legend { margin: 4px 0 0; font-size: 11px; color: var(--text-faint); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .c-legend i { display: inline-block; width: 9px; height: 9px; margin-right: 3px; vertical-align: -1px; }
@@ -1020,6 +1030,8 @@ button.run-state:focus-visible { outline: 2px solid var(--accent); outline-offse
 .st-idle { color: var(--text-dim); }
 .s-am { color: var(--text); font-size: 12.5px; }
 .s-am.low { color: var(--warn); font-weight: 700; }
+.s-sm { font-size: 11.5px; color: var(--text-faint); }
+.s-sm.none { color: var(--warn); }
 .sum-row .cond { font-size: 11px; }
 .s-bad { font-size: 11px; font-weight: 700; color: #ff7a60; }
 .s-pend { font-family: var(--mono); font-size: 11px; color: var(--accent); }
@@ -1090,6 +1102,7 @@ button.run-state:focus-visible { outline: 2px solid var(--accent); outline-offse
 .radio-log li.imp { border-left: 3px solid var(--warn); padding-left: 5px; background: rgba(224, 128, 90, 0.07); }
 .radio-log li.imp.log-loss, .radio-log li.imp.log-ff { border-left-color: #ff6a50; background: rgba(224, 86, 63, 0.12); }
 .radio-log li.imp.log-kill { border-left-color: #ffd36a; background: rgba(255, 211, 106, 0.08); }
+.radio-log li.imp.log-threat { border-left-color: #ff9a3c; background: rgba(200, 90, 30, 0.2); }
 .side.simple .radio-log { max-height: none; overflow: visible; font-size: 13px; }
 .side.simple .radio-log li { padding: 4px 0; }
 .side.simple .radio-log li.imp { padding-left: 5px; }
@@ -1181,6 +1194,33 @@ button.sight-hint.on kbd { color: var(--ok); border-color: var(--ok); }
 .cm-item[aria-disabled="true"]:hover { background: transparent; }
 .cm-item[aria-disabled="true"]:hover .cm-l { color: var(--text-faint); }
 .cm-sep { height: 1px; background: var(--line-soft); margin: 3px 0; }
+
+/* M8a 새 위협 첫 안내 한 줄 (처음 한 번만, 작게) */
+.threat-tip {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  max-width: calc(100% - 24px);
+  padding: 5px 12px;
+  background: rgba(40, 20, 6, 0.92);
+  border: 1px solid #ff9a3c;
+  border-left: 4px solid #ff9a3c;
+  color: #ffd2a0;
+  font-size: 13.5px;
+  font-weight: 600;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.threat-tip[hidden] { display: none; }
+.h-grid .h-threats { margin: 0 0 6px; gap: 1px; font-size: 12.5px; }
+.h-threats li { margin: 1px 0; }
+.h-grid .h-threats b { color: #ffc27a; }
+.threat-tip b { color: #ff9a3c; margin-right: 8px; font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.06em; }
+.map-wrap.scoped .threat-tip { top: 44px; }
 
 /* 기초 훈련 할 일 */
 .tut {

@@ -37,7 +37,7 @@ TMM.Ballistics = (function () {
     if (deg >= 130) return 'rear';
     return 'side';
   }
-  const ASPECT_NAMES = { front: '정면', side: '측면', rear: '후면' };
+  const ASPECT_NAMES = { front: '정면', side: '측면', rear: '후면', top: '상부' }; // M8a top: 자폭 드론·포병 직격
 
   /**
    * 명중 확률. mods (M3, TMM.Intel.fireMods 가 만듦):

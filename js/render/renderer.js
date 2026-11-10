@@ -180,6 +180,7 @@ TMM.Renderer = (function () {
 
   // 적 전차 기호: 적대 부대 기호(마름모) + 기갑 타원 + 번호
   // pos: 그릴 위치 (접촉의 현재/마지막 위치), ghost: 놓친 접촉(흐리게, 점선)
+  const MODEL_TAG = { POKPUNG: '폭풍호', CHONMA20: '천마-20', ATINF: '대전차조' }; // M8a
   function drawEnemy(ctx, view, e, hovered, targeted, pos, ghost) {
     const p = view.toScreen(pos ? pos.x : e.x, pos ? pos.y : e.y);
     const R = 13;
@@ -211,8 +212,17 @@ TMM.Renderer = (function () {
     ctx.lineWidth = 2;
     ctx.stroke();
     ctx.beginPath();
-    ctx.ellipse(0, 0, 6.5, 3.8, 0, 0, Math.PI * 2);
+    if (e.model === 'ATINF') {
+      // M8a 보병 대전차조: 보병 기호(X)
+      ctx.moveTo(-5.5, -5.5); ctx.lineTo(5.5, 5.5); ctx.moveTo(5.5, -5.5); ctx.lineTo(-5.5, 5.5);
+    } else ctx.ellipse(0, 0, 6.5, 3.8, 0, 0, Math.PI * 2);
     ctx.stroke();
+    if (e.model === 'CHONMA20') {
+      // M8a 천마-20: 미사일 표시(위쪽 작은 화살)
+      ctx.beginPath();
+      ctx.moveTo(0, -9.5); ctx.lineTo(0, -4.5); ctx.moveTo(-2.2, -7.3); ctx.lineTo(0, -9.8); ctx.lineTo(2.2, -7.3);
+      ctx.stroke();
+    }
 
     // 번호 꼬리표
     ctx.fillStyle = color;
@@ -232,6 +242,13 @@ TMM.Renderer = (function () {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.fillText('유기', 0, R + 3);
+    } else if (MODEL_TAG[e.model] && !dead) {
+      // M8a: 새 적 차종 이름표 (작게)
+      ctx.fillStyle = color;
+      ctx.font = '600 10px ' + FONT_MONO;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(MODEL_TAG[e.model], 0, R + 9);
     }
     ctx.restore();
   }
@@ -722,6 +739,7 @@ TMM.Renderer = (function () {
     for (const c of contacts) if (!c.wreck && c.visible) drawContact(ctx, view, game, c, sel);
     for (const u of game.units) if (!u.destroyed && !focus.includes(u)) drawUnit(ctx, view, u, false, time);
     for (const u of focus) drawUnit(ctx, view, u, true, time);
+    if (TMM.ThreatLayer) TMM.ThreatLayer.draw(ctx, view, game, time); // M8a 연막·포격 경고·미사일·드론
     drawBadges(ctx, view, game, time);
     drawFx(ctx, view, game, time);
     drawPreview(ctx, view, game);

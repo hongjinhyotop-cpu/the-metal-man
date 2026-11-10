@@ -13,6 +13,7 @@
  *   withdraw { x, y, slot, count }    철수: 처음 일부는 정면을 적에게 둔 채 후진
  *   stop     {}                       현 위치 정지
  *   report   {}                       상황 보고 (radio-net.js 가 보고문을 만든다)
+ *   smoke    {}                       M8a 연막: 전차 앞(위협 쪽)에 연막을 친다 (작전당 2회, smoke.js)
  *
  * 전차 필드 (Orders.init 이 붙임):
  *   order {type, ...}  지금 수행 중인 마지막 명령 (명령이 없으면 이것을 계속한다)
@@ -109,6 +110,7 @@ TMM.Orders = (function () {
   // 명령을 실행할 수 없는 이유 (없으면 null)
   function check(game, u, o) {
     if (u.destroyed) return '격파됨';
+    if (o.type === 'smoke' && !(u.smoke > 0)) return '연막탄 소진';
     if ((o.type === 'move' || o.type === 'withdraw' || o.type === 'bound') && u.damage.track) return '궤도 손상, 기동 불가';
     if (o.type === 'move' || o.type === 'withdraw') {
       const info = game.map.infoAt(o.x, o.y);
@@ -159,6 +161,8 @@ TMM.Orders = (function () {
         return { ok: true };
       case 'bound':
         return joinBound(game, u, o.boundId);
+      case 'smoke': // M8a
+        return TMM.Smoke.deploy(game, u, game.pendingEvents);
       default:
         return { ok: true };
     }
@@ -346,7 +350,7 @@ TMM.Orders = (function () {
     for (const ev of events) {
       if (ev.type !== 'shot') continue;
       const u = ev.target;
-      if (u.side !== 'friend' || u.ally || u === ctrl || u.destroyed || !ev.res.hit) continue;
+      if (u.side !== 'friend' || u.ally || u === ctrl || u.destroyed || !ev.res.hit || ev.indirect) continue; // M8a: 포탄·드론은 엄폐물로 피할 쏜 쪽이 없다
       if (u.state === 'moving' || u.damage.track) continue;
       if (now - u.selfCoverAt < R().SELF_COVER_COOLDOWN_SEC) continue;
       if (game.rand() > R().SELF_COVER_P * R().crewFactor(u, 'initiative')) continue;
@@ -428,6 +432,7 @@ TMM.Orders = (function () {
       case 'target': return o.targetId == null ? '지정 목표 해제' : (ctx && ctx.targetName ? ctx.targetName : '지정 표적') + ' 사격하라';
       case 'bound': return '엄호 이동으로 격자 ' + gridOf(game, o) + ' 까지 전진하라. ' + o.firstTeam + '조 먼저';
       case 'report': return '상황 보고하라';
+      case 'smoke': return '연막 쳐라';
       default: return '';
     }
   }
@@ -442,6 +447,7 @@ TMM.Orders = (function () {
       case 'roe': return R().ROE[o.roe].name;
       case 'target': return o.targetId == null ? '지정 목표 해제' : (ctx && ctx.targetName ? ctx.targetName : '표적') + ' 조준';
       case 'bound': return '엄호 이동. ' + (u.team === o.firstTeam ? '먼저 전진' : '엄호 후 전진');
+      case 'smoke': return '연막 발사';
       default: return '';
     }
   }

@@ -56,6 +56,9 @@ TMM.SCOPE = {
     K1A2: { len: 7.5, wid: 3.6, h: 2.4 },
     K2: { len: 7.5, wid: 3.6, h: 2.4 },
     CHONMA: { len: 6.6, wid: 3.3, h: 2.4 },
+    POKPUNG: { len: 6.9, wid: 3.4, h: 2.4 },
+    CHONMA20: { len: 7.1, wid: 3.5, h: 2.5 },
+    ATINF: { len: 10, wid: 10, h: 1.2 }, // 엎드린 대전차조
     TRUCK: { len: 7, wid: 2.5, h: 2.9 },
     INF: { len: 18, wid: 18, h: 1.7 }, // 흩어진 분대
   },

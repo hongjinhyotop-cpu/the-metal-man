@@ -343,11 +343,11 @@ TMM.Panel = (function () {
 
     set(els.time, 'time', TMM.Clock.format(game.gameSeconds));
     set(els.remain, 'remain', TMM.Clock.remaining(game.gameSeconds));
-    const runKey = (game.over ? 'o' : game.paused ? 'p' : 'r' + game.speedMult) + (game.combat ? 'c' : '') + (game.started ? 's' : '');
+    const runKey = (game.over ? 'o' : game.paused ? 'p' : 'r' + game.speedMult) + (game.combat ? 'c' : '') + (game.started ? 's' : '') + (game.urgent ? 'u' : '');
     if (cache.get('run') !== runKey) {
       cache.set('run', runKey);
       // M7.5: 상태 표시가 곧 일시정지/재개 단추
-      els.run.innerHTML = game.over ? '작전 종료' : (game.paused ? (game.started ? '▶ 재개' : '▶ 작전 개시') : '❚❚ ' + (game.combat ? '교전 중' : '진행 중') + ' ×' + game.speedMult) + ' <kbd>Space</kbd>';
+      els.run.innerHTML = game.over ? '작전 종료' : (game.paused ? (game.started ? '▶ 재개' : '▶ 작전 개시') : '❚❚ ' + (game.urgent ? '위협 경고 ×1' : (game.combat ? '교전 중' : '진행 중') + ' ×' + game.speedMult)) + ' <kbd>Space</kbd>'; // M8a: 경고 중엔 ×1
       els.run.title = (game.paused ? '누르면 진행 (스페이스바)' : '누르면 일시정지 (스페이스바)') + (game.combat ? ' · 교전 중에는 시간이 느리게 흐릅니다 (실제 1초 = 게임 ' + TMM.CONFIG.COMBAT_TIME_SCALE + '초)' : '');
       els.run.disabled = !!game.over;
       els.run.classList.toggle('paused', game.paused || !!game.over);

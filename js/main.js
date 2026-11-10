@@ -9,7 +9,11 @@
   function createGame(setup) {
     const camp = setup.campaign || null;
     const op = camp ? TMM.Campaign.battleSpec(camp) : null;
-    const game = TMM.Battle.create({ light: setup.tutorial ? 'day' : setup.light, op, crew: camp ? camp.crew : undefined, map: TMM._map });
+    const mixed = !camp && !setup.tutorial && setup.mix === 'mixed'; // M8a 훈련 모드 적 구성: 천마호만 / 혼합
+    const game = TMM.Battle.create({
+      light: setup.tutorial ? 'day' : setup.light, op, crew: camp ? camp.crew : undefined, map: TMM._map,
+      enemies: mixed ? TMM.Enemy.MIXED.enemies : null, fires: mixed ? TMM.Enemy.MIXED.fires : null, mix: mixed ? 'mixed' : null,
+    });
     game.campaign = camp;
     const ctrl0 = TMM.Radio.controlUnit(game);
     Object.assign(game, {
@@ -38,6 +42,13 @@
     if (!trainingWired) {
       trainingWired = true;
       let light = 'day';
+      let mix = 'chonma';
+      el.querySelectorAll('[data-mix]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          mix = btn.dataset.mix;
+          el.querySelectorAll('[data-mix]').forEach((b) => b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
+        });
+      });
       el.querySelectorAll('[data-light]').forEach((btn) => {
         btn.addEventListener('click', () => {
           light = btn.dataset.light;
@@ -46,7 +57,7 @@
       });
       el.querySelector('[data-go]').addEventListener('click', () => {
         el.hidden = true;
-        boot({ light });
+        boot({ light, mix });
       });
       el.querySelector('[data-basic]').addEventListener('click', () => {
         el.hidden = true;
@@ -195,6 +206,8 @@
             O('stop', { run: () => issue({ type: 'stop' }) }),
             O('report', { run: () => issue({ type: 'report' }) }),
             { label: '목표 해제', key: 'X', desc: '지정한 표적을 풀고 알아서 쏘게 합니다', disabled: u.targetId == null, why: '지정한 표적이 없습니다', run: () => actions.clearTarget() },
+            // M8a 연막 (작전당 2회)
+            O('smoke', { label: '연막 (' + (u.smoke || 0) + '회 남음)', disabled: !(u.smoke > 0), why: '연막탄을 다 썼습니다 (재정비 때 다시 채워짐)', run: () => issue({ type: 'smoke' }) }),
           ];
           if (me && TMM.Scope.canUse(game)) {
             list.push({ sep: true });
@@ -267,6 +280,7 @@
         }
         if (id === 'stop') return issue({ type: 'stop' });
         if (id === 'report') return issue({ type: 'report' });
+        if (id === 'smoke') return issue({ type: 'smoke' }); // M8a 연막 (지휘 전차는 바로, 나머지는 무전)
         cmd.mode = cmd.mode === id ? null : id;
       },
       setRoe(roe) {
@@ -441,6 +455,15 @@
         game.scope.keyPan = pan;
         game.scope.keyTilt = tilt;
       },
+      // M8a: 조준 화면에서도 내 전차(소대장이 탄 전차)는 바로 연막을 칠 수 있다
+      scopeSmoke() {
+        if (actions.dismissGuide()) return;
+        const u = TMM.Scope.unit(game);
+        if (!u || game.over) return;
+        const had = u.smoke > 0;
+        logLines(TMM.Command.issue(game, String(u.id), { type: 'smoke' }).lines);
+        voice('me', had ? '연막!' : '연막탄 없음 (작전당 2회)', had ? null : 'warn', 1.6);
+      },
       scopeBlocked() {
         if (actions.dismissGuide()) return;
         voice(null, '조준 중에는 무전 명령을 내릴 수 없습니다 — Tab 으로 지도', 'warn', 2.2);
@@ -494,11 +517,69 @@
       log('체계', '작전 지도 로드 완료. K1A2 전차 4대 주둔지 대기 중. ' + TMM.LIGHT[light].name + ' 작전.', 'system');
     }
 
+    // M8a: 새 위협이 처음 나올 때 한 번만 짧은 안내 한 줄 (지도 위, 몇 초 뒤 사라짐). 본 안내는 브라우저에 기억.
+    const tipEl = document.getElementById('threat-tip');
+    let tipTimer = null;
+    let tipsSeen = {};
+    try { tipsSeen = JSON.parse(localStorage.getItem('tmm.tips') || '{}') || {}; } catch (e) { tipsSeen = {}; }
+    function tipOnce(key) {
+      const T = TMM.CAMPAIGN.THREATS[key];
+      if (!T || tipsSeen[key] || game.tutorial) return;
+      tipsSeen[key] = 1;
+      try { localStorage.setItem('tmm.tips', JSON.stringify(tipsSeen)); } catch (e) { /* 저장소 없음 */ }
+      tipEl.innerHTML = '<b>처음 보는 위협</b>';
+      tipEl.appendChild(document.createTextNode(T.tip));
+      tipEl.hidden = false;
+      clearTimeout(tipTimer);
+      tipTimer = setTimeout(() => { tipEl.hidden = true; }, 9000);
+    }
+    const MODEL_TIP = { ATINF: 'atinf', POKPUNG: 'pokpung', CHONMA20: 'chonma20' };
+    const dirFrom = (p) => {
+      const us = game.units.filter((u) => !u.destroyed);
+      if (!us.length) return '';
+      const c = { x: us.reduce((a, u) => a + u.x, 0) / us.length, y: us.reduce((a, u) => a + u.y, 0) / us.length };
+      return TMM.Orders.dirTo(c, p);
+    };
+    const MISS_WHY = { smoke: '연막에 가려 유도가 끊겼다', cover: '엄폐물 뒤로 빠져 유도가 끊겼다', launcher: '쏜 적 전차가 격파되어 유도가 끊겼다', miss: '빗나갔다', gone: '표적이 이미 격파됨' };
+
     // 무전망(TMM.Radio)이 만든 교신과, 무전망을 거치지 않는 알림(전장관리체계 경고·중대 무전·화면 효과)
     function report(ev, realT) {
       if (ev.type === 'radio') {
         log(ev.from, ev.text, ev.kind);
+      } else if (ev.type === 'missile-warn') {
+        // M8a 미사일 경고: 무전 기록 강조 + 조준 화면 경고 (큰 팝업 없음)
+        const m = ev.missile, t = m.target;
+        log('⚠ 미사일', dirFrom(m.from) + '쪽 발사 섬광 — ' + t.callsign + ' 노림, 약 ' + Math.max(1, Math.round(ev.eta)) + '초. 연막(G)·엄폐물 뒤로!', 'threat');
+        alertScope('미사일! → ' + t.callsign + ' (연막 G)', 'warn');
+        tipOnce('chonma20');
+      } else if (ev.type === 'missile-miss') {
+        if (ev.missile.warned && ev.why !== 'gone') log('전장관리체계', ev.missile.target.callsign + '을(를) 노린 미사일 — ' + MISS_WHY[ev.why] + '.', 'report');
+      } else if (ev.type === 'arty-warn') {
+        const s = ev.strike;
+        const sec = Math.max(1, Math.round(s.fireAt - game.gameSeconds));
+        const inside = game.units.filter((u) => !u.destroyed && Math.hypot(u.x - s.x, u.y - s.y) <= s.r + 0.6).map((u) => u.callsign);
+        log('⚠ 포격', '격자 ' + game.map.gridRef(s.x, s.y) + ' 일대 약 ' + sec + '초 뒤 포격' + (inside.length ? ' — ' + inside.join('·') + ' 원 안! 원 밖으로 이동' : '') + '.', 'threat');
+        if (inside.length) alertScope('포격 경고 — ' + inside.join('·') + ' 원 밖으로', 'warn');
+        tipOnce('arty');
+      } else if (ev.type === 'drone-seen') {
+        log('⚠ 드론', dirFrom(ev.drone) + '쪽 상공에 적 정찰 드론. 발견되면 몇 분 뒤 그 자리에 포격이 온다.', 'threat');
+        tipOnce('recon');
+      } else if (ev.type === 'drone-spot') {
+        const who = (ev.units || [ev.unit]).filter((u) => !u.destroyed).map((u) => u.callsign);
+        if (ev.known && who.length) log('⚠ 드론', '정찰 드론이 ' + who.join('·') + ' 위를 돈다 — 위치 노출. 곧 포격, 자리를 옮기거나 숲으로.', 'threat');
+      } else if (ev.type === 'kami-warn') {
+        log('⚠ 자폭 드론', dirFrom(ev.drone) + '쪽에서 자폭 드론 접근 — ' + ev.target.callsign + ' 쪽. 멈추지 말 것, 전차장 기관총 사격.', 'threat');
+        alertScope('자폭 드론 접근 → ' + ev.target.callsign, 'warn');
+        tipOnce('kami');
+      } else if (ev.type === 'kami-down') {
+        log(ev.by.callsign, '자폭 드론 격추! (12.7mm 기관총)', 'kill');
+      } else if (ev.type === 'kami-miss') {
+        if (!ev.target.destroyed) log(ev.target.callsign, '자폭 드론이 옆에서 터졌다 — 직격 아님' + (ev.part ? ', ' + TMM.PARTS[ev.part].name + ' 손상' : '') + '.', ev.part ? 'warn' : 'report');
+      } else if (ev.type === 'enemy-disperse') {
+        const c = I.contact(game, 'friend', ev.unit.id);
+        if (c && c.known) log('전장관리체계', I.displayName(c) + ' — 흩어져 물러남.', 'report');
       } else if (ev.type === 'contact-id') {
+        if (ev.side === 'friend' && ev.contact.kind === 'hostile' && MODEL_TIP[ev.unit.model]) tipOnce(MODEL_TIP[ev.unit.model]);
         if (ev.side !== 'friend' || ev.how === 'iff' || !ev.contact.known) return;
         const c = ev.contact, t = ev.unit;
         if (c.kind === 'friendly') {
@@ -507,7 +588,7 @@
         }
       } else if (ev.type === 'shot') {
         const { shooter: s, target: t, res } = ev;
-        game.fx.push({ t: realT, x0: s.x, y0: s.y, x1: t.x, y1: t.y, side: s.side, hit: res.hit, pen: res.pen, kill: res.destroyed });
+        if (!ev.indirect && ev.ammoId !== 'MG') game.fx.push({ t: realT, x0: s.x, y0: s.y, x1: t.x, y1: t.y, side: s.side, hit: res.hit, pen: res.pen, kill: res.destroyed }); // M8a: 포탄·드론·기관총은 예광탄 없음
         // M6: 조준경에 보이는 다른 사격 (1호차 수동 사격은 발사할 때 이미 넣음)
         const u1 = TMM.Scope.unit(game);
         if (u1 && !u1.destroyed && !ev.manual) {
@@ -575,7 +656,9 @@
     } else if (camp) {
       for (const t of game.op.intro) log(TMM.RADIO.COMPANY, t, 'system');
     } else {
-      log(TMM.RADIO.COMPANY, '강철, 여기 강철 6. 적 천마호 전차 1개 소대(4대), 매봉 능선·새터읍 일대에서 남하 중. 강철은 주둔지를 지키며 저지하라. 이상.', 'system');
+      if (game.mix === 'mixed') {
+        log(TMM.RADIO.COMPANY, '강철, 여기 강철 6. 적 전차 4대(천마호 2·폭풍호 1·천마-20 1), 매봉 능선·새터읍 일대에서 남하 중. 보병 대전차조가 주둔지 양옆 숲으로 스며든다. 적 포병·정찰 드론·자폭 드론 주의. 이상.', 'system');
+      } else log(TMM.RADIO.COMPANY, '강철, 여기 강철 6. 적 천마호 전차 1개 소대(4대), 매봉 능선·새터읍 일대에서 남하 중. 강철은 주둔지를 지키며 저지하라. 이상.', 'system');
       log(TMM.RADIO.COMPANY, '전방 저수지 동쪽 숲에 아군 보병 분대(관측초소)와 보급 트럭이 있다. 둘 다 피아식별장치 없음 — 식별 전 사격 주의. 이상.', 'system');
     }
     if (!game.tutorial) log('체계', '1호차는 직접 조작, 2·3·4호차는 무전으로 지휘합니다. 전차 아이콘이나 [1조]·[2조]·[소대 전체]로 고르고, 지도를 우클릭해 명령하십시오. 조작이 헷갈리면 F1.', 'system');
@@ -628,7 +711,9 @@
       if (!game.paused && !game.over) {
         game.combat = TMM.Battle.inCombat(game);
         const scale = game.combat ? C.COMBAT_TIME_SCALE : C.TIME_SCALE;
-        const gdt = dt * scale * game.speedMult;
+        // M8a: 미사일·포격·자폭 드론 경고 중에는 배속을 ×1 로 (대처할 틈)
+        game.urgent = TMM.Battle.urgent(game);
+        const gdt = dt * scale * (game.urgent ? 1 : game.speedMult);
         const events = TMM.Battle.step(game, gdt);
         for (const ev of events) report(ev, now / 1000);
       } else if (!game.visReady) {

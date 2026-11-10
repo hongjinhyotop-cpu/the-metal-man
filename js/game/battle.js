@@ -18,7 +18,7 @@ TMM.Battle = (function () {
     const game = {
       map: (opts && opts.map) || TMM.MapGen.generate(),
       units: TMM.Platoon.create(op ? op.units : null),
-      enemies: TMM.Enemy.create(op ? op.enemies : null),
+      enemies: TMM.Enemy.create(op ? op.enemies : (opts && opts.enemies) || null), // M8a: 훈련 '혼합' 편성은 opts.enemies
       allies: TMM.Allies.create(op ? !op.allies : false),
       op,
       enemyRally: op && op.rally ? op.rally : null,
@@ -39,6 +39,10 @@ TMM.Battle = (function () {
     TMM.Crew.init(game, opts && opts.crew); // M5 승무원·신뢰도 (opts.crew: 이전 전투의 TMM.Crew.snapshot)
     TMM.Scope.init(game); // M6 1호차 조준 화면
     if (TMM.Support) TMM.Support.init(game); // M7b 이웃 K2 중대(흑표) 지원 요청
+    TMM.Smoke.init(game); // M8a 연막 (전차마다 작전당 2회)
+    TMM.Missiles.init(game); // M8a 천마-20 불새-3
+    TMM.Indirect.init(game, op ? op.fires : opts && opts.fires); // M8a 포병·정찰 드론·자폭 드론
+    game.mix = (opts && opts.mix) || null; // M8a 훈련 모드 적 구성 ('mixed' | null)
     game.pendingEvents = []; // M6: 전투 틱 밖(조준 화면 발사)에서 생긴 사건 → 다음 틱에서 무전·승무원 처리
     return game;
   }
@@ -58,6 +62,9 @@ TMM.Battle = (function () {
     TMM.Orders.update(game, gdt);
     TMM.EnemyAI.update(game, gdt, events);
     TMM.Gunnery.update(game, gdt, events);
+    TMM.Missiles.update(game, gdt, events); // M8a
+    TMM.Indirect.update(game, gdt, events); // M8a
+    TMM.Smoke.update(game);
     TMM.Crew.update(game, gdt, events);
     TMM.Orders.onEvents(game, events);
     TMM.Crew.onEvents(game, events);
@@ -115,6 +122,8 @@ TMM.Battle = (function () {
   function inCombat(game) {
     const C = TMM.CONFIG;
     if (game.lastShotAt != null && game.gameSeconds - game.lastShotAt < C.COMBAT_LINGER_SEC) return true;
+    // M8a: 포격 경고·날아오는 미사일·보이는 자폭 드론이 있으면 시간을 느리게 (대처할 틈)
+    if (TMM.Missiles.active(game) || TMM.Indirect.urgent(game)) return true;
     for (const c of game.intel.friend.contacts.values()) {
       if (!c.visible || c.wreck || c.kind === 'friendly') continue;
       for (const u of game.units) {
@@ -124,5 +133,14 @@ TMM.Battle = (function () {
     return false;
   }
 
-  return { create, step, inCombat };
+  // M8a: 대처할 틈이 필요한 위협이 있는가 (경고가 뜬 미사일·포격 원 안의 전차·보이는 자폭 드론) → 화면 배속을 ×1 로
+  function urgent(game) {
+    if (game.missiles && game.missiles.some((m) => !m.done && m.warned && !m.lost)) return true;
+    for (const s of TMM.Indirect.warnings(game)) {
+      if (game.units.some((u) => !u.destroyed && Math.hypot(u.x - s.x, u.y - s.y) <= s.r + 1)) return true;
+    }
+    return !!game.indirect && game.indirect.drones.some((d) => !d.gone && d.kind === 'kami' && d.seen);
+  }
+
+  return { create, step, inCombat, urgent };
 })();

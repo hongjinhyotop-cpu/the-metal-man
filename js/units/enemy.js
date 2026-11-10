@@ -25,13 +25,16 @@ TMM.Enemy = (function () {
   // spec (M7a 캠페인): 같은 모양의 목록. 더한 필드 —
   //   static: 진지 방어 (움직이지 않고 보이는 아군과 싸움, 손상되면 후퇴) · delay: 작전 개시 후 이만큼(게임 초) 뒤에 움직임
   //   engageM: 교전 거리 (집결·진지 도착과 상관없이 이 거리) · fireM: 이 거리 안의 표적만 쏨(매복) · stage: -1 이면 집결하지 않음 · heading
+  // M8a: model — 'CHONMA'(기본) | 'POKPUNG' 폭풍호 | 'CHONMA20' 천마-20 | 'ATINF' 보병 대전차조
+  const CALL = { CHONMA: '적 전차 ', POKPUNG: '폭풍호 ', CHONMA20: '천마-20 ', ATINF: '대전차조 ' };
+  const ROLE = { CHONMA: '천마호 소대', POKPUNG: '폭풍호 선발대', CHONMA20: '천마-20 (미사일·능동방어)', ATINF: '보병 대전차조' };
   function create(spec) {
     return (spec || ROSTER).map((d) => TMM.Damage.initCombat({
       id: d.id,
       num: d.n,
       side: 'enemy',
-      callsign: '적 전차 ' + d.n,
-      role: '천마호 소대',
+      callsign: CALL[d.model || 'CHONMA'] + d.n,
+      role: ROLE[d.model || 'CHONMA'],
       team: 0,
       x: d.x,
       y: d.y,
@@ -41,7 +44,7 @@ TMM.Enemy = (function () {
       state: 'idle',
       speedKmh: 0,
       ai: {
-        mode: d.static ? 'defend' : 'advance',
+        mode: d.static || d.model === 'ATINF' ? 'defend' : 'advance',
         route: (d.route || []).map(([x, y]) => ({ x, y })).concat(d.gx != null ? [{ x: d.gx, y: d.gy }] : []),
         wp: 0,
         stage: d.stage,
@@ -51,18 +54,36 @@ TMM.Enemy = (function () {
         lane: d.lane,
         deployed: false,
         lastThreatAt: -1e9,
-        static: !!d.static,
+        static: !!d.static || d.model === 'ATINF',
         delay: d.delay || 0,
         pending: !!d.delay, // 아직 도착 전 (지도 밖에 있는 것으로 친다 — exited 와 같이 쓴다)
         engageM: d.engageM || null,
-        fireM: d.fireM || null, // 이 거리 안에 들어온 표적만 쏜다 (진지 매복)
+        fireM: d.fireM || (d.model === 'ATINF' ? 450 : null), // 이 거리 안에 들어온 표적만 쏜다 (진지 매복). 대전차조는 450m
         tag: d.tag || null, // 작전 목표용 표시 (교량 사수: 'west' 하천 서쪽에서 오는 적)
+        kind: d.model === 'ATINF' ? 'atteam' : d.model === 'CHONMA20' ? 'atgm' : 'tank', // M8a 행동 갈래
       },
-    }, 'CHONMA')).map((e) => {
+      fixedSpeedKmh: d.model === 'ATINF' ? 4 : 0, // 대전차조는 걸어서
+    }, d.model || 'CHONMA')).map((e) => {
       if (e.ai.pending) e.exited = true; // 늦게 오는 적: 도착할 때까지 보이지도, 쏘지도 않는다
+      const veh = TMM.VEHICLES[e.model];
+      if (veh.missiles) e.missiles = veh.missiles; // M8a 천마-20 불새-3
+      if (veh.aps) e.aps = veh.aps.charges; // M8a 능동방어체계 남은 요격 횟수
       return e;
     });
   }
 
-  return { create, RALLY, EXIT, ROSTER };
+  // M8a 훈련 모드 '혼합' 편성: 같은 두 갈래 협공에 폭풍호·천마-20 을 섞고, 보병 대전차조 2개, 적 포병·정찰 드론·자폭 드론
+  const MIXED = {
+    enemies: ROSTER.map((d) => Object.assign({}, d, { model: d.n === 1 ? 'POKPUNG' : d.n === 3 ? 'CHONMA20' : 'CHONMA' })).concat([
+      { id: 105, n: 5, model: 'ATINF', x: 55, y: 110, route: [[58, 108], [64.5, 106.5]] },
+      { id: 106, n: 6, model: 'ATINF', x: 106, y: 106, route: [[101.5, 104.5]] },
+    ]),
+    fires: {
+      artillery: { from: 240, max: 3, still: true },
+      recon: [{ at: 120, route: [[82, 70], [70, 95], [82, 110], [96, 96], [84, 84]], life: 900 }],
+      kamikaze: [{ at: 480, n: 2, from: [106, 1] }],
+    },
+  };
+
+  return { create, RALLY, EXIT, ROSTER, MIXED };
 })();

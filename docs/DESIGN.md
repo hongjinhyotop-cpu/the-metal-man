@@ -1,6 +1,6 @@
 # The Metal Man — 설계 문서
 
-> 다음 개발 세션이 가장 먼저 읽는 문서입니다. 단계(M1~M8, M7.5 포함)를 진행할 때마다 "진행 현황"과 "구조" 절을 갱신하십시오.
+> 다음 개발 세션이 가장 먼저 읽는 문서입니다. 단계(M1~M8, M7.5·M8a/b 포함)를 진행할 때마다 "진행 현황"과 "구조" 절을 갱신하십시오.
 
 ## 1. 게임 소개
 
@@ -34,7 +34,8 @@
 | **M7a** | 캠페인 뼈대 | ✅ 완료 |
 | **M7b** | 재정비 깊이 (선택·보충·승무원 관리) | ✅ 완료 |
 | **M7.5** | 조작·화면 정리 (마우스 조작·간단 보기·기초 훈련) | ✅ 완료 |
-| M8 | 적 다양화와 마무리 | 예정 |
+| **M8a** | 적 다양화 (새 적·포병·드론·연막·흑표 하향·난이도 재조정) | ✅ 완료 |
+| M8b | 마무리 | 예정 |
 
 ### M1 지도와 이동 (완료)
 
@@ -385,6 +386,67 @@
 - **교육 문구**: 프롤로그 교육 1·2·3(`campaign-data.js`), 훈련 모드 시작 화면, 작전 명령 화면의 출동 안내, 첫 무전 기록 안내, 조준 화면 첫 안내·일시정지 문구를 새 조작(아이콘 클릭·우클릭 메뉴·단추)에 맞게 고쳤다.
 - **확인**: 기존 단축키 전부(1~7, M·C·B·T·W·K·S·R, 8·9·0, Q·X·V, Space, Tab, Esc), 조준 화면(레이저·배율·수동 발사), 흑표 요청(메뉴), 결과 → 재정비, 기초 훈련 3단계를 Playwright 로 마우스·키로 실제 눌러 봄. 모의 캠페인(`tools/sim-campaign.js`)은 그대로 돈다 — 규칙은 그대로.
 
+### M8a 적 다양화 (완료)
+
+M8 을 둘로 나눴다. M8a 는 새 적과 새 위협, 연막, 흑표 하향, 난이도 다시 맞추기. 마무리(M8b)는 아래 6절 메모.
+
+- **새 적** (`weapons.js` 차종·탄·관통표, `sensors.js`, `enemy.js create` 의 `model`). 근거 없는 수치는 모두 "게임용 추정치" 주석.
+  - **폭풍호** `POKPUNG`: 125mm(`AMMO.E125`, 115mm 보다 2km 밖에서 조금 낫게), 개량 조준경(야간 탐지 2.8km), 기동 간 사격(×0.35), 정면은 천마호보다 조금 단단. 수가 적은 선발대(작전 2·4·5 에 1대씩).
+  - **천마-20** `CHONMA20`: 125mm + **불새-3 미사일** 2발(`VEHICLES.CHONMA20.missiles`), **능동방어체계** `aps { charges: 2, p: 0.75, vs: ['K277'] }` — 맞을 고폭탄을 요격(횟수 제한, 철갑탄은 못 막음, `gunnery.js fireAt`). 요격을 본 표적에는 승무원이 철갑탄으로 바꾼다(`pickAmmo`, `target.apsSeen`). 정면 복합장갑(K276 관통 0.72→0.48). 장전 8.5초.
+  - **보병 대전차조** `ATINF` (cls 'infantry', soft): 대전차 로켓 `AMMO.ATR`(사거리 500m, 3발, 재장전 22초), 매복 거리 450m(`fireM`), 신호 0.26(숲 ×0.3 이면 K1A2 가 약 270m 에서야 봄), 로켓 섬광도 작다(`SIGNATURE.flash` 0.3, `intel.js`). **정면을 보이는 전차는 150m 안이 아니면 기다린다**(옆·뒤를 노림, `gunnery.js chooseTarget`). `route` 가 있으면 숲을 따라 매복 자리로 걸어간다(4km/h). 로켓을 다 쓰거나 사상자가 나면(50%) 흩어지고, 적 전차가 무너지면 모두 흩어진다(`enemy-disperse`, 지도에서 사라짐). 적 전차 '무너짐' 판정과 목표 띠·결과 화면의 전차 수에는 넣지 않는다.
+  - 적 AI 갈래 `ai.kind`: 'tank' | 'atgm'(천마-20, 미사일 유도 중에는 멈춤) | 'atteam'.
+- **공축 기관총** (`gunnery.js machineGun`, 수치 `MG`): 소대 전차는 주포와 따로, 보이는 '적으로 식별된' 보병을 700m 안에서 3초마다 쏜다 → 제압(14초 동안 로켓 못 쏨) 또는 사상자. 사격 금지면 안 쏜다.
+- **불새-3 미사일** (`js/game/missiles.js` `TMM.Missiles`, 수치 `TMM.MISSILE`·`AMMO.ATGM`): 천마-20 이 멈춰서, 자기 눈으로 보이는 아군 전차가 1.2~4.5km 면(처음 본 뒤 25초, 그다음 28초 간격) 쏜다. **느리다(120m/s: 1.5km 13초, 3km 25초).** 날아가는 내내 쏜 쪽이 표적을 봐야 하고(시선·연막), 1초 끊기면 빗나간다(`missile-miss` why: smoke·cover·launcher). 발사 섬광을 아군이 보면 1~2초 뒤 **"미사일!" 경고**(`missile-warn`): 무전 기록 주황 줄 + 지도에 미사일·노린 전차 고리·남은 초 + 조준 화면 경고. 무전 받는 전차(2·3·4호차)의 전차장은 30%×판단력으로 스스로 연막(1호차는 소대장이 정함). 끝까지 유도되면 `Ballistics.resolveShot`(관통 정면 0.25·측면 0.92).
+- **포병·정찰 드론·자폭 드론** (`js/game/indirect.js` `TMM.Indirect`, 수치 `TMM.INDIRECT`, 작전 설정 `op.fires`):
+  - **포병**: 요청 → (드론 발견 100~160초 / 적이 보고 있는 채 150초 넘게 한자리 50~80초) 뒤 떨어짐. **떨어지기 35초 전 지도에 붉은 원 + 남은 초**(`arty-warn`). 반지름 90m 원 안에 6초 동안 8발. 직격(7m)은 윗면 관통 판정(`TOP_PEN`, 격파 ×0.5), 40m 안은 외부 장비 손상(궤도·무전기·사통·주포) 32%×가까움, 승무원 경상 10%(전차장이 다치기 쉬움). 포격 사이 120초, 작전마다 최대 3~4회.
+  - **정찰 드론**: 경로를 돌며 아래 750m(숲 ×0.35·시가지 ×0.6·연막 0)를 8초 보면 '발견' → 적이 위치를 알고(`Intel.reveal`) 포병 요청, 그 위를 20초 돈다. 우리 전차 1.7km(야간 1.4km) 안이면 드론이 보인다(`drone-seen`). 쏠 수 없다.
+  - **자폭 드론**: 적이 아는(없으면 가장 가까운) 전차로 35m/s 로 날아온다. 보이면(1km) 경고(`kami-warn`), 500m 안에서 전차장 12.7mm 가 2초마다 7%×전차장 실력으로 떨어뜨린다(움직이면 ×0.8, 소대장이 조준경에 있으면 ×0.4, 숲 ×0.7). 명중 80% × 숲 0.45·시가지 0.75 × 움직임 0.6 × 연막 0.4. 맞으면 윗면 관통 0.7, 격파 ×0.6, 부위는 사통·무전·주포·엔진. 빗나가도 30% 외부 장비 손상.
+  - 직격·자폭 명중은 `shot` 사건(`indirect: true`, 탄 'ARTY'·'DRONE', 면 'top' — 승무원 부상표 `HURT_W.top`)으로 무전·승무원·신뢰도 처리를 그대로 탄다. 스스로 엄폐 이동은 하지 않는다.
+- **연막** (`js/game/smoke.js` `TMM.Smoke`, 수치 `TMM.SMOKE`): 전차마다 작전당 2회(`unit.smoke`, 전투마다 새로 → 재정비 때 다시 채워짐, 재정비 소식에 한 줄). 명령 `smoke`(`orders.js`, 무전 종류 'smoke' — 이동 명령을 대신하지 않음). 전차 앞 45m(지켜보는 방향 → 가장 가까운 아는 적 → 차체 방향)에 반지름 95m, 4초에 퍼져 80초. 연막을 지나는 시선은 모두 가린다(`Intel.pairVis` → 보이지도, 쏘지도 못함). 미사일 유도 끊김, 정찰 드론 못 봄, 자폭 드론 ×0.4.
+- **화면** (M7.5 간단 보기 원칙):
+  - 명령 버튼 3×3: 이동·엄호·철수 / 목표 지정·정지·상황 보고 / **연막 G**·엄호 이동·흑표 지원. 내 전차 우클릭 메뉴에 '연막 (n회 남음)'. 선택 요약 한 줄에 '연막 n'. 단축키 G(조준 화면에서도 내 전차 연막).
+  - 경고는 **지도 위 표시 + 무전 기록 주황 줄**(`kind: 'threat'`, `radio-log.js` IMPORTANT). 큰 팝업 없음. 조준 화면에는 테두리 경고(`alertScope`). 지도 그리기는 `js/render/threat-layer.js`(`TMM.ThreatLayer`): 연막 구름, 포격 원·남은 초, 포탄 폭발, 경고가 뜬 미사일(남은 초), 우리가 알아챈 드론. 새 적 기호: 대전차조는 마름모 안 X, 천마-20 은 작은 화살, 이름표(폭풍호·천마-20·대전차조).
+  - **경고 중 배속 ×1**: 경고가 뜬 미사일, 원 안에 전차가 있는 포격 경고, 보이는 자폭 드론이 있으면 화면 배속을 ×1 로(`Battle.urgent`, 상단 '위협 경고 ×1'). 포격 경고·미사일은 '교전 중' 시간 감속도 켠다(`Battle.inCombat`).
+  - **처음 보는 위협 안내 한 줄** (`#threat-tip`, main.js `tipOnce`): 새 적 식별·포격 경고·드론·미사일이 처음 나올 때 한 번, 지도 위 9초. 본 것은 `localStorage['tmm.tips']`. 기초 훈련에서는 안 뜬다.
+  - 작전 명령 화면: '새 위협' 줄(위협마다 이름·설명) + 장만석 상사의 대응 한 줄씩 (`TMM.CAMPAIGN.THREATS`: name·brief·jms·tip, 작전의 `threats`). 목표 띠는 '적 전차 n/m'. 결과 화면에 보병 대전차조·날아온 미사일(유도 끊김 수)·적 포격 줄.
+  - F1 조작 요약 카드에 G 연막과 '새 위협 대응' 6줄, README 에 위협·대응 표.
+- **작전별 배치** (`campaign-data.js`, 작전의 `enemiesExtra`·`fires`·`threats`, 적 목록의 `model`):
+
+| # | 작전 | M8a 추가 |
+|---|---|---|
+| 1 | 첫 접적 | 천마호 3 + 보병 대전차조 2(숲을 따라 주둔지 양옆 숲으로 스며듦) |
+| 2 | 지연전 | 세 제대 8대(1제대 선두 폭풍호 1, 3제대 3 → 2대) + 포병(4분부터, 3회, 한자리에 오래 있는 전차) |
+| 3 | 교량 사수 (야간) | 천마호 6 + 정찰 드론(다리 동쪽을 돎) + 포병(4회) |
+| 4 | 새터읍 역습 | 천마호 3·폭풍호 1 진지 + 읍내 보병 대전차조 4 |
+| 5 | 매봉 능선 탈환 | 천마-20 2(양 끝)·폭풍호 1 진지(4대 → 3대) + 자폭 드론(5분 2대, 20분 1대) |
+
+- **흑표 지원 하향** (`TMM.SUPPORT`): 거절 35 → **50%**, 도착 150~240 → **210~330초**, 머무는 시간 240 → **150초**. '급할 때 도움' 정도.
+- **훈련 모드 적 구성**: 시작 화면 [천마호만] / [혼합]. 혼합 = `TMM.Enemy.MIXED`(같은 두 갈래 협공에 폭풍호·천마-20, 대전차조 2, 포병·정찰 드론·자폭 드론). `Battle.create({ enemies, fires, mix })`.
+- **모의 캠페인** (`tools/sim-campaign.js`): `good` 은 새 위협에 대처(미사일 경고 → 노린 전차 연막, 포격 경고 → 원 안 전차를 원 밖(아는 적에게서 먼 쪽)으로 옮겼다가 도착하면 원래 방향 엄호 — 단 2km 안의 보이는 적과 맞서 싸우는 중이면 자리를 지킴(피하려다 옆구리를 보이는 게 더 위험), 자폭 드론 경고 → 노린 전차를 조금 움직임), 목표 지정은 전차만(보병은 승무원이 고폭탄·기관총), 지연전은 4호차가 처음부터 동쪽 엄호. 새 전략 `naive` = good 과 같지만 새 위협에 대처하지 않음. 전략은 지난 틱 사건 `st.events` 를 본다.
+- **기존 기능 확인**: 조준 화면(레이저·발사·G 연막), 흑표 요청, 기초 훈련 3단계, 캠페인 저장·이어하기·재정비, 훈련 모드 천마호만/혼합을 Playwright 로 돌려 봄. 저장 형식은 그대로(v2) — 연막은 작전마다 새로 채우므로 저장할 것이 없다.
+
+### M8a 균형 메모 (모의 캠페인)
+
+모의 캠페인 (`tools/sim-campaign.js`, 4개로 나눠 96판 — 조준 화면만·가만히는 48판). 재정비는 '추천대로'(rec) 또는 아무것도 안 함(idle).
+
+| 전략 | 임무 완수 | 부분 성공 | 소대 붕괴 | 끝까지 남은 전차 |
+|---|---|---|---|---|
+| M7b 같은 시드 (흑표 예전 값, 새 적 없음) — 비교 기준 | 86% | 6% | 7% | 3.5대 |
+| **좋은 지휘 + 추천 재정비 + 흑표** | **71%** | 10% | 19% | 2.9대 |
+| 좋은 지휘 + 추천 재정비, 흑표 안 부름 | 63% | 17% | 21% | 2.8대 |
+| 대처 안 함(naive) + 추천 재정비 + 흑표 | 60% | 20% | 20% | 2.7대 |
+| 조준 화면만 + 추천 재정비 | 0% | 31% | **69%** | 1.5대 |
+| 가만히 + 재정비 안 함 | 0% | 15% | **85%** | 1.3대 |
+| 가만히 + 추천 재정비 | 0% | 27% | 73% | 1.5대 |
+
+작전별 평균 손실 (좋은 지휘 + 흑표): 1 첫 접적 0.22 · 2 지연전 0.60 · 3 교량 0.12 · 4 새터읍 0.38 · 5 매봉 0.57.
+
+- **흑표 차이 8%p** (71 vs 63, 목표 10%p 안). M7b 에는 73% → 90%(17%p). 흑표 하향만으로 지연전 손실이 0.4 → 1.0 대로 늘어서, 지연전 3제대를 3 → 2대로 줄여 맞췄다.
+- **대처하면 확실히 준다**: 매봉 능선(미사일·자폭 드론) 새 소대 한 판 손실 1.13 → 0.79(대처), 자폭 드론 격파 7 → 0(24판). 교량 사수(드론·포병) 포격 피해 부위 22 → 9, 손실 0.44 → 0.19(32판). 다만 지연전에서는 적과 맞서는 중에 포격을 피해 움직이면 옆구리를 보여 오히려 손해 — 봇은 2km 안의 적과 싸우는 중이면 자리를 지킨다.
+- 조정 과정(게임용 추정치): 처음 값으로는 좋은 지휘 완수 21% 였다. 125mm 정면 관통 0.22 → 0.13, 명중 곡선을 115mm 에 가깝게, 폭풍호 기동 간 사격 0.5 → 0.35, 천마-20 정면(K276) 0.5 → 0.72, 미사일 4 → 2발·정면 관통 0.4 → 0.25·속도 180 → 120m/s(사람이 대처할 틈), 대전차 로켓 측면 0.6 → 0.5, 매봉 능선 적 4 → 3대, 새터읍 폭풍호 2 → 1·대전차조 5 → 4, 자폭 드론 4 → 3대, 포격 원 110 → 90m·8발·경고 35초. 모의 봇도 고침: 목표 지정은 전차만(보병을 지정하면 차체가 보병 쪽으로 돌아 적 전차에 옆구리를 보임), 지연전 4호차는 처음부터 동쪽 엄호.
+- 더 어렵게: `TMM.MISSILE`(발수·`AUTO_SMOKE_P`), `TMM.INDIRECT.ARTY`(`WARN_SEC`·`RADIUS_M`), `VEHICLES.CHONMA20.aps`, 작전의 `fires`·`enemiesExtra`. 더 쉽게는 반대로, 또는 `TMM.SMOKE.CHARGES`.
+
+
 ## 4. 핵심 규칙과 수치
 
 - 지도: 160 × 120 칸, **1칸 = 50m** → 8km × 6km. 좌표 단위는 "칸"(실수). x = 서→동, y = 북→남.
@@ -425,6 +487,9 @@ js/game/orders.js        명령 실행(이동·엄호·엄호 이동·철수·�
 js/radio/radio-net.js    소대 무전망: 한 채널 송신 대기열, 명령 전달·복창·오청·잡음·두절, 자동 보고, 상황 보고 (TMM.Radio)
 js/game/command.js       지휘 명령의 입구: 받는 대상 → 지휘 전차는 바로, 나머지는 무전 (TMM.Command)
 js/game/support.js       M7b 이웃 K2 중대 '흑표' 지원 요청(작전마다 1번, 거절 가능, K2 2대가 와서 잠시 엄호) (TMM.Support, 수치 TMM.SUPPORT)
+js/game/smoke.js         M8a 연막: 전차마다 작전당 2회, 연막 구름·시선 가림 (TMM.Smoke, 수치 TMM.SMOKE)
+js/game/missiles.js      M8a 천마-20 불새-3 미사일: 발사·비행·유도(시선·연막)·경고·명중 (TMM.Missiles, 수치 TMM.MISSILE)
+js/game/indirect.js      M8a 적 포병(원형 경고·탄착)·정찰 드론(발견 → 포격)·자폭 드론(전차장 기관총) (TMM.Indirect, 수치 TMM.INDIRECT, 작전 설정 op.fires)
 js/crew/crew-data.js     승무원 명단·성격(traits)·시작 신뢰도·대사표 (TMM.CREW_ROSTER, TMM.CREW_TRUST_START, TMM.CREW_VOICE), M7b 보충병 이름·성격(TMM.CREW_RECRUITS)·재정비 이벤트(TMM.CREW_EVENTS) ← 인물·대사는 여기
 js/crew/crew.js          승무원 규칙: 실력 배수·피로·사기·부상·성장·신뢰도·명령 해석·되묻기·잡담·결과 요약 (TMM.Crew, 수치 TMM.CREW) ← 승무원 균형은 여기
 js/ai/enemy-ai.js        적 AI: 숨은 경로 전진·집결·협공·정지 사격·후퇴·소대 퇴각 (TMM.EnemyAI, 행동 기준 TMM.EnemyAI.P)
@@ -444,16 +509,17 @@ js/ui/tutorial.js        M7.5 기초 훈련 3단계(이동·무전 명령·사�
 js/ui/campaign-ui.js     캠페인 화면(#camp): 처음 화면·프롤로그·작전 명령(요약 지도·탄종 배분)·M7b 재정비(소식·승무원 이벤트·고르기·결과)·엔딩 (TMM.CampaignUI)
 js/render/terrain-layer.js  지형 바탕을 한 번 그려두는 오프스크린 캔버스
 js/render/scope-view.js  M6 조준 화면 그리기: 높이 버퍼 지형(주간/열상)·표적 실루엣·효과·조준선·나침반·정보 띠·무전 6줄·자막·경고 테두리·첫 안내 (TMM.ScopeView)
+js/render/threat-layer.js  M8a 지도 위 연막·포격 경고 원·폭발·미사일·드론 (TMM.ThreatLayer)
 js/render/renderer.js    매 프레임 그리기(야간 어둠·시야 표시·전차·접촉 기호·사격선·사거리 원·예광탄·감시 부채꼴·무전 표시·명령 미리보기), 좌표 변환, 클릭 판정
 tools/sim-load.js        (개발용) 전투 규칙 스크립트를 Node vm 으로 읽기
-tools/sim-campaign.js    (개발용) 모의 캠페인: node tools/sim-campaign.js <good|scope|passive> [횟수] [시드] [rec|idle] [흑표 1|0]
+tools/sim-campaign.js    (개발용) 모의 캠페인: node tools/sim-campaign.js <good|naive|scope|passive> [횟수] [시드] [rec|idle] [흑표 1|0]
 js/main.js               처음 화면 진입(showEntry: sessionStorage 'tmm.next' = campaign|training|tutorial)·훈련 모드 시작 화면(기초 훈련/실전)·boot(setup: {light}|{campaign}|{tutorial}), M7.5 우클릭 메뉴 내용(actions.openMenu), 작전 목표 띠, 행동(actions: 받는 대상·명령 고르기·지도/표적 클릭, M6 조준 화면 열기·발사·레이저·배율), 무전망 밖 알림(오인사격·중대 무전)·화면 효과, 조준 화면 자막·경고(피격·격파·교신 두절), 주 루프
 docs/DESIGN.md           이 문서
 ```
 
 ### 주요 데이터
 
-- `TMM.game` (`Battle.create` + main.js): M7.5 `hoverUnitId`(커서 아래 내 전차), `viewDetail`(상세 보기), `tutorial`(기초 훈련 `{ step, marks[], move, watch, enemy, shotAt, done }`, 없으면 일반 전투). M7b `support`(흑표 지원 상태, `TMM.Support`), `crewPeople`(보충병 정의). M7a `op`(캠페인 작전, 없으면 훈련), `campaign`(캠페인 상태), `enemyRally`, `enemyExits`, `opCallsDone`. `over.result`·`over.reason`. 그 밖 `{ map, units, enemies, allies, light, startSeconds, gameSeconds, vis, intel, enemyGo, enemyBroken, ffCount, lastShotAt, combat, over, rand, selectedId, paused, started, speedMult, hover, hoverContactId, showSight, fx, radio, bound, cmd, scope, pendingEvents, scopeFx, scopeUi }`
+- `TMM.game` (`Battle.create` + main.js): M8a `smoke[]`(연막 구름), `missiles[]`·`missileStats`, `indirect{ strikes[], drones[], booms[], fires, nStrikes }`, `mix`(훈련 혼합), `urgent`(경고 중 ×1). 전차 `smoke`(남은 연막), 적 `missiles`·`aps`·`apsSeen`·`guiding`·`ai.kind`·`ai.suppressedUntil`. M7.5 `hoverUnitId`(커서 아래 내 전차), `viewDetail`(상세 보기), `tutorial`(기초 훈련 `{ step, marks[], move, watch, enemy, shotAt, done }`, 없으면 일반 전투). M7b `support`(흑표 지원 상태, `TMM.Support`), `crewPeople`(보충병 정의). M7a `op`(캠페인 작전, 없으면 훈련), `campaign`(캠페인 상태), `enemyRally`, `enemyExits`, `opCallsDone`. `over.result`·`over.reason`. 그 밖 `{ map, units, enemies, allies, light, startSeconds, gameSeconds, vis, intel, enemyGo, enemyBroken, ffCount, lastShotAt, combat, over, rand, selectedId, paused, started, speedMult, hover, hoverContactId, showSight, fx, radio, bound, cmd, scope, pendingEvents, scopeFx, scopeUi }`
   - M6 `scope`: 위 M6 절. `pendingEvents`: 전투 틱 밖(조준 화면 발사)에서 생긴 사건, 다음 `Battle.step` 이 처리. `scopeFx`·`scopeUi`(경고·자막·첫 안내·반동): 화면 전용(main.js).
   - M4 `radio`: `{ queue[], timers[], busyUntil, pending: Map('전차id:종류' → {unitId, order, state}), batch, control }`. `state`: queued·tx·garble·noack·ack·exec. `bound`: 진행 중인 엄호 이동. `cmd`: `{ to, mode }` 화면의 받는 대상과 지도 클릭을 기다리는 명령.
   - `over`: 승패가 나면 `{ win, at }`. `fx`: 화면 효과(실제 시간 기준으로 사라짐).
@@ -470,7 +536,7 @@ docs/DESIGN.md           이 문서
   - M4 필드 (아군 소대, `Orders.init`·`Radio.init`): `order{type,…}`(마지막 명령), `watch`(감시 방향 라디안|null), `roe`('hold'|'id'|'free'), `reverseM`(남은 후진 m), `selfCoverAt`, `selfMove`, `ammoWarned`, `lastMissLog`.
   - M5 필드 (아군 소대, `Crew.init`): `crew{ members[{key,name,rank,role,traits,skill,fatigue,morale,injury,shaken,stats}], byRole, trust, trustStart, trustLog[], kills, rescue, … }`, `stall`(고장 정비 남은 초).
   - `game.crewState`: 유머 간격·대화 대기열·격한 교전 판정 캐시.
-- 전투 사건(battle.js 가 돌려줌): `radio{from,text,kind}`(M4, 무전 기록 한 줄. M5 kind 'crew'·'trust-up'·'trust-down'), `arrive`, `shot{shooter,target,ammoId,res,fresh,unidentified,friendlyFire,manual(M6)}`, `ammo-switch`, `contact-new{side,contact,unit,by}`, `contact-id{side,contact,unit,how('sight'|'iff')}`, `cease-fire`, `enemy-engage`, `enemy-retreat`, `enemy-go`, `enemy-break`, `enemy-abandon`, `enemy-exit`, `ally-move`, `ally-exit`, `over`. M7b: `leader-transfer{from,to}`, `support-arrive{units}`, `support-refused`. main.js 의 `report()` 가 무전 문장·효과로 바꾼다.
+- 전투 사건(battle.js 가 돌려줌): `radio{from,text,kind}`(M4, 무전 기록 한 줄. M5 kind 'crew'·'trust-up'·'trust-down'), `arrive`, `shot{shooter,target,ammoId,res,fresh,unidentified,friendlyFire,manual(M6)}`, `ammo-switch`, `contact-new{side,contact,unit,by}`, `contact-id{side,contact,unit,how('sight'|'iff')}`, `cease-fire`, `enemy-engage`, `enemy-retreat`, `enemy-go`, `enemy-break`, `enemy-abandon`, `enemy-exit`, `ally-move`, `ally-exit`, `over`. M7b: `leader-transfer{from,to}`, `support-arrive{units}`, `support-refused`. M8a: `smoke{unit,cloud}`, `missile-launch/warn{missile,eta}/miss{missile,why}`, `arty-plan/warn/impact/done{strike}`, `drone-launch`, `drone-seen`, `drone-spot{drone,unit,units,known}`, `kami-launch/warn{drone,target}/down{drone,by}/miss{drone,target,part,why}`, `enemy-disperse`, `shot` 의 `missile`·`indirect`·`res.intercepted`·탄 'MG'·'ATGM'·'ARTY'·'DRONE'. main.js 의 `report()` 가 무전 문장·효과로 바꾼다.
 - 지도(map): `{ cols, rows, metersPerCell, type[], elev[], sightElev[], speedMs[], typeAt(), infoAt(), speedMsAt(), altitudeAt(), gridRef() }`
 
 ### 확장 지침
@@ -481,24 +547,21 @@ docs/DESIGN.md           이 문서
 - 전투 수치(명중·관통·장전·탄약)는 `weapons.js`, 탐지·식별은 `sensors.js`, 지형의 가림은 `terrain-types.js` 의 `TERRAIN_SIGHT`, 적 행동 기준(교전 거리·집결·후퇴·퇴각 조건)은 `enemy-ai.js` 위쪽 상수, 적 경로는 `enemy.js` 만 고치면 된다.
 - 전투 규칙은 DOM 없이 돌아가므로(`battle.js` 이하) Node 로 모의 전투를 수백 번 돌려 균형을 볼 수 있다: index.html 의 스크립트 중 render·input·ui·main 을 뺀 나머지를 `vm` 으로 읽고 `game = TMM.Battle.create({ light, rand })`, `TMM.Battle.step(game, 0.5)` 반복. 한 판에 약 2초.
 
-## 6. 다음 단계 메모 (M8 적 다양화와 마무리 준비)
+## 6. 다음 단계 메모 (M8b 마무리 준비)
 
-M7b 까지로 캠페인의 뼈대·재정비·보충이 다 섰다. M8 에서 할 일과 연결점:
+M8a 까지로 적 종류와 위협이 다 섰다. M8b(마무리)에서 할 일과 연결점:
 
-- **적 다양화**: 지금 적은 천마호 하나(`VEHICLES.CHONMA`, `AMMO.E115`). 새 차종은 `weapons.js`(차종·탄·관통표 — 관통표는 [탄종][표적 차종] 이라 K1A2·K2 와 새 적 양쪽 칸을 다 채울 것), `sensors.js`(SENSORS·SIGNATURE), `scope.js` 의 `SIZE`, `scope-view.js` 의 실루엣, `renderer.js` 의 적 기호를 같이 추가한다.
-  - 후보: 보병전투차(BMP 계열 — 빠르고 약함, 대전차 미사일은 정지 상태에서만·비행 시간 있음), 125mm 개량형 천마호(정면 관통↑), 대전차 보병 분대(숲·시가지 매복, 보병 `INF` 를 적 편으로), 자주포 탄막(지역 피해·사격 진지 이동 압박).
-  - 적 AI 는 `EnemyAI.update` 의 `mode`(advance·engage·deploy·hold·retreat·withdraw·defend)와 작전마다의 `static/delay/engageM/fireM/tag` 로 움직인다. 새 종류는 `ai.kind` 로 행동을 갈라 넣는 게 쉽다(예: 미사일 차량은 1.5~3km 에서 멈춰 쏘고 가까워지면 물러남).
-  - 작전별 편성은 `campaign-data.js` 의 `enemies/extra/waves`. 실패 여파(`battleSpec`)는 차종과 상관없이 동작한다.
-- **흑표 지원과 적**: 흑표 K2 는 `game.allies` 라 적 표적 목록(`Gunnery.allTargets`)에 이미 들어 있다. 새 적 무기(미사일)도 같은 경로로 맞힐 수 있다.
-- **화면 (M7.5 이후)**: 새 명령은 `CommandBar.ORDERS`(이름·단축키·한 줄 설명·안내) 에 넣으면 버튼·안내 줄·우클릭 메뉴(`actions.openMenu` 에서 `O(id)`)가 같은 문구를 쓴다. 새 정보 칸은 간단 보기를 지키도록 `<details class="card fold">` 로. 새 키는 `input.js` 에 더하고, 꼭 필요한 것만 조작 요약 카드(`index.html #help`)의 '꼭 알아 둘 키'에.
-- **마무리 후보**: 난이도 선택(기본에서 소대장 전사 없음 → 어려움에서 소대장 부상·전사, `Crew.hurt` 의 `m.player` 제한을 난이도로), 저장 슬롯, 재정비 화면 모바일 정리(좌석 select 가 좁음), 조준 화면 헌터킬러, 효과음(무전 잡음·발사), 캠페인 통계 화면(작전별 사격·명중·피해), 튜토리얼 작전.
-- **균형**: 아래 M7b 메모의 모의 캠페인 숫자를 기준으로, 새 적을 넣을 때마다 `good` 이 임무 완수 70~90%, `scope`·`passive` 가 절반 이상 소대 붕괴로 남는지 본다. 재정비 수치는 `Campaign.K`, 작전별 시간은 `OPS[i].refitHours`, 흑표는 `TMM.SUPPORT`.
-- **모의 캠페인 방법**: `node tools/sim-campaign.js good 48` (약 4분). 직접 짜려면 '확장 지침'의 Node `vm` 방법(`tools/sim-load.js`)으로 읽고, `s = Campaign.newState(); s.phase = 'briefing'` → 반복 `{ Campaign.applyPlan(s); g = Battle.create({ op: Campaign.battleSpec(s), map, crew: s.crew, rand }); …Battle.step… ; Campaign.record(s, g); if (s.refitPending) Campaign.autoRefit(s, 'rec', rand); }` 를 `s.phase === 'ending'` 까지. 재정비를 직접 고르려면 `plan = Campaign.recommend(s)` 를 고쳐서 `Campaign.applyRefit(s, plan, rand)`.
-- **저장 형식**: `state.v = 2` (키는 `tmm.campaign.v1` 그대로). 필드를 바꾸면 `Campaign.migrate` 에 고쳐 읽기를 더한다.
+- **난이도 선택**: 기본(지금) / 어려움(소대장 부상·전사 — `Crew.hurt` 의 `m.player` 제한, 흑표 거절 ↑, 실패 여파 ↑). 쉬움은 `TMM.SMOKE.CHARGES`·`TMM.MISSILE.AUTO_SMOKE_P` ↑, `TMM.INDIRECT.ARTY.WARN_SEC` ↑. 난이도는 캠페인 상태에 넣고 `Campaign.migrate` 에 기본값.
+- **효과음**: 무전 잡음·발사·"미사일!" 경고음·포탄 낙하음. 경고 사건(`missile-warn`·`arty-warn`·`kami-warn`)이 이미 main.js `report()` 에 모여 있다.
+- **새 위협 다듬기 후보**: 조준 화면에 미사일·드론·연막 구름 그리기(지금은 테두리 경고와, 내 전차가 연막 속이면 화면 전체가 뿌옇게만), 자폭 드론을 조준 화면에서 직접 쏘기, 연막을 던질 방향 고르기(지금은 위협 쪽 자동), 포병 대응 사격(대포병) 지원 요청, 대전차조 매복 자리 무작위.
+- **저장 슬롯·캠페인 통계 화면**(작전별 사격·명중·피해·미사일 회피), 재정비 화면 모바일 정리, 헌터킬러, 이어지는 과제(아래).
+- **균형 기준** (M8a 메모의 숫자): `good`+추천 재정비+흑표 완수 60~75%, 흑표를 부르든 안 부르든 차이 10%p 안, `naive`(대처 안 함)가 `good` 보다 확실히 낮고, `scope`·`passive` 는 대부분 소대 붕괴. 새 위협·난이도를 바꾸면 이 넷을 다시 돌린다.
+- **모의 캠페인 방법**: `node tools/sim-campaign.js good 96` (4개로 나눠 돌리면 약 2분: 시드를 1, 100001, 200001, 300001 로). 직접 짜려면 '확장 지침'의 Node `vm` 방법(`tools/sim-load.js`)으로 읽고, `s = Campaign.newState(); s.phase = 'briefing'` → 반복 `{ Campaign.applyPlan(s); g = Battle.create({ op: Campaign.battleSpec(s), map, crew: s.crew, rand }); …st.events = Battle.step… ; Campaign.record(s, g); if (s.refitPending) Campaign.autoRefit(s, 'rec', rand); }` 를 `s.phase === 'ending'` 까지. 작전 하나만 볼 때는 `s.op = i` 로 시작.
+- **저장 형식**: `state.v = 2` (키는 `tmm.campaign.v1` 그대로). M8a 는 저장 형식을 바꾸지 않았다. 필드를 바꾸면 `Campaign.migrate` 에 고쳐 읽기를 더한다.
 
 ### 이어지는 과제 (M6 까지에서)
 
 - 조준 화면의 '포수에게 표적 넘기기'(헌터킬러), 이도현 이병의 탄종 실수가 '다른 탄이 실제로 들어감'이 되는 것, 모바일 조준 화면 정보 띠.
 - 비지휘 아군과의 교신, 사격 진지 점령 명령(`betterSpot` 일반화), 장만석 상사 제안 받아들이기 버튼, 무전 우선권(긴급 "중지!").
-- 적 AI 경로 다양화와 새 적 종류는 M8. 시야 표시 성능, 지도 확대/이동.
+- 적 AI 경로 다양화(새 적 종류는 M8a 에서 함). 시야 표시 성능, 지도 확대/이동.
 - (M7b 에서) 흑표에게 지원 방향을 다시 주기·일찍 돌려보내기, 재정비에서 탄종(철갑/고폭)까지 대대에 골라 요청하기, 후송자 복귀 날짜 미리 보기, 보충병 대사.

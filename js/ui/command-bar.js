@@ -30,6 +30,7 @@ TMM.CommandBar = (function () {
     support: '<path d="M8 2l5 2v4c0 3-2.2 5-5 6-2.8-1-5-3-5-6V4z"/>',
     scope: '<circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="1.2"/><path d="M8 2v3M8 11v3M2 8h3M11 8h3"/>',
     ammo: '<path d="M6 14V6l2-4 2 4v8z"/><path d="M6 10h4"/>',
+    smoke: '<path d="M4 12a3 3 0 0 1 0-6 4 4 0 0 1 7.5-1.5A3 3 0 0 1 12 12z"/><path d="M5 14h6"/>', // M8a 연막
   };
   const icon = (k) => '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true">' + (ICON[k] || '') + '</svg>';
 
@@ -48,6 +49,8 @@ TMM.CommandBar = (function () {
     { id: 'target', label: '목표 지정', key: 'T', desc: '쏠 표적을 정해 줍니다', hint: '쏠 표적을 클릭 (빈 곳은 해제)' },
     { id: 'stop', label: '정지', key: 'S', desc: '그 자리에 멈춥니다' },
     { id: 'report', label: '상황 보고', key: 'R', desc: '탄약·손상·보이는 적을 무전으로 보고받습니다' },
+    // M8a: 연막 — 전차마다 작전당 2회. 미사일이 날아오면 연막부터
+    { id: 'smoke', label: '연막', key: 'G', desc: '전차 앞에 연막을 칩니다 — 잠시 서로 안 보임, 날아오는 미사일이 빗나감 (전차마다 작전당 2회)' },
     { id: 'bound', label: '엄호 이동', key: 'B', desc: '소대 전체가 조별로 번갈아 엄호하며 전진합니다', hint: '전진할 목표 지점을 클릭 (소대 전체)' },
     // M7b: 이웃 K2 중대(흑표) 지원 요청 — 작전마다 한 번
     { id: 'support', label: '흑표 지원', key: 'K', desc: '이웃 K2 중대에 지원을 요청합니다 (작전마다 1번, 거절될 수 있음)', hint: '흑표가 지켜 줄 방향(지점)을 클릭' },
@@ -55,7 +58,7 @@ TMM.CommandBar = (function () {
 
   const ROE_KEYS = { hold: '8', id: '9', free: '0' };
 
-  const ORDER_NAME = { support: '흑표 지원 요청', move: '이동', cover: '엄호', bound: '엄호 이동', target: '목표 지정', withdraw: '철수', stop: '정지', report: '상황 보고', roe: '사격 통제' };
+  const ORDER_NAME = { smoke: '연막', support: '흑표 지원 요청', move: '이동', cover: '엄호', bound: '엄호 이동', target: '목표 지정', withdraw: '철수', stop: '정지', report: '상황 보고', roe: '사격 통제' };
 
   function btnTip(el, text) {
     el.title = text;
@@ -156,7 +159,8 @@ TMM.CommandBar = (function () {
     return '<li><button type="button" class="sum-row team-' + u.team + (u.id === game.selectedId ? ' sel' : '') + (u.destroyed ? ' dead' : '') + '" data-unit="' + u.id + '" title="' + esc(u.callsign + ' — ' + TMM.Orders.describe(game, u)) + '">' +
       '<span class="s-n">' + u.id + '</span><b>' + esc(u.callsign) + (u === ctrl ? '<span class="s-me">직접</span>' : '') + '</b>' +
       '<span class="s-st ' + cls + '">' + ic + ' ' + word + '</span>' +
-      '<span class="s-am mono' + (total <= 5 && !u.destroyed ? ' low' : '') + '">탄 ' + total + '</span>' + extra + '</button></li>';
+      '<span class="s-am mono' + (total <= 5 && !u.destroyed ? ' low' : '') + '">탄 ' + total + '</span>' +
+      (u.destroyed || u.smoke == null ? '' : '<span class="s-sm mono' + (u.smoke ? '' : ' none') + '" title="남은 연막 (작전당 2회)">연막 ' + u.smoke + '</span>') + extra + '</button></li>';
   }
 
   // 지도 아래 안내 한 줄: 지금 클릭하면 무슨 일이 생기는지

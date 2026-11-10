@@ -53,6 +53,52 @@ TMM.AMMO = {
     externalDamage: 0.25,
     killMul: 1.0,
   },
+  // ---- M8a 새 적의 무기 ----
+  // 125mm 활강포: 폭풍호·천마-20 (공개 자료: 폭풍호는 125mm 포와 개량된 사격통제장치를 갖춘 것으로 알려짐).
+  // 명중 곡선은 천마호 115mm 보다 원거리에서 낫게 — 게임용 추정치.
+  E125: {
+    id: 'E125',
+    name: '125mm 날개안정분리철갑탄',
+    short: '125mm',
+    use: '전차용',
+    caliber: '125mm',
+    rangeM: 3000,
+    hit: [[0, 0.9], [500, 0.86], [1000, 0.78], [1500, 0.66], [2000, 0.42], [2500, 0.19], [3000, 0.08]], // 게임용 추정치 (천마호 115mm 보다 2km 밖에서 낫다)
+    externalDamage: 0.3,
+    killMul: 1.0,
+  },
+  // 불새-3 대전차미사일 (천마-20). 공개 자료: 북한의 레이저·유선 유도 계열 장거리 대전차미사일로 알려짐.
+  // 사거리·속도·명중은 모두 게임용 추정치. 날아가는 동안 쏜 쪽이 표적을 계속 봐야 한다(연막·엄폐물에 숨으면 빗나감).
+  ATGM: {
+    id: 'ATGM',
+    name: '불새-3 대전차미사일',
+    short: '미사일',
+    use: '전차용',
+    caliber: '미사일',
+    rangeM: 4500, // 게임용 추정치
+    minM: 1200, // 이보다 가까우면 쏘지 않는다 (포를 쓴다)
+    speedMs: 120, // 비행 속도 m/s — 1.5km 를 약 13초, 3km 를 약 25초 (게임용 추정치: 피할 틈을 주려고 느리게)
+    hit: [[0, 0.9], [4500, 0.85]], // 끝까지 유도되면 (게임용 추정치)
+    hullDownHit: 0.75, // 차체 엄폐 표적: 포탑만 보여도 유도로 꽤 맞힌다
+    externalDamage: 0.4,
+    killMul: 1.0,
+  },
+  // 대전차 로켓 (보병 대전차조의 휴대용 로켓·무반동총 계열) — 게임용 추정치
+  ATR: {
+    id: 'ATR',
+    name: '대전차 로켓',
+    short: '대전차 로켓',
+    use: '전차용',
+    caliber: '로켓',
+    rangeM: 500,
+    hit: [[0, 0.8], [150, 0.7], [300, 0.45], [450, 0.25], [500, 0.18]],
+    externalDamage: 0.35,
+    killMul: 0.7,
+  },
+  // 표시용 이름 (직접 쏘는 탄이 아님): 공동축 기관총, 포병 포탄, 자폭 드론
+  MG: { id: 'MG', name: '공축 기관총', short: '기관총', caliber: '7.62mm', rangeM: 800, hit: [[0, 1]], externalDamage: 0, killMul: 1 },
+  ARTY: { id: 'ARTY', name: '적 포병 포탄', short: '포탄', caliber: '포병', rangeM: 0, hit: [[0, 1]], externalDamage: 0, killMul: 1 },
+  DRONE: { id: 'DRONE', name: '자폭 드론', short: '자폭 드론', caliber: '드론', rangeM: 0, hit: [[0, 1]], externalDamage: 0, killMul: 0.6 },
 };
 
 /*
@@ -64,11 +110,15 @@ TMM.AMMO = {
 TMM.PENETRATION = {
   K276: {
     CHONMA: { front: [0.97, 0.9], side: [0.99, 0.97], rear: [0.99, 0.98] },
+    POKPUNG: { front: [0.9, 0.75], side: [0.98, 0.95], rear: [0.99, 0.98] }, // M8a 폭풍호: 천마호보다 조금 단단함
+    CHONMA20: { front: [0.72, 0.48], side: [0.96, 0.9], rear: [0.98, 0.95] }, // M8a 천마-20: 정면 복합장갑 (철갑탄도 가까울수록)
     K1A2: { front: [0.25, 0.1], side: [0.85, 0.7], rear: [0.95, 0.9] },
     K2: { front: [0.15, 0.05], side: [0.75, 0.6], rear: [0.9, 0.85] }, // 오인사격용
   },
   K277: {
     CHONMA: { front: [0.8, 0.8], side: [0.93, 0.93], rear: [0.96, 0.96] },
+    POKPUNG: { front: [0.6, 0.6], side: [0.9, 0.9], rear: [0.95, 0.95] },
+    CHONMA20: { front: [0.25, 0.25], side: [0.82, 0.82], rear: [0.94, 0.94] }, // 정면은 고폭탄이 잘 안 먹힌다 (능동방어체계는 별도)
     K1A2: { front: [0.05, 0.05], side: [0.5, 0.5], rear: [0.8, 0.8] },
     K2: { front: [0.03, 0.03], side: [0.4, 0.4], rear: [0.75, 0.75] },
   },
@@ -77,7 +127,23 @@ TMM.PENETRATION = {
     K2: { front: [0.06, 0.02], side: [0.5, 0.35], rear: [0.8, 0.65] },
     CHONMA: { front: [0.6, 0.4], side: [0.9, 0.8], rear: [0.95, 0.9] },
   },
+  // ---- M8a (모두 게임용 추정치) ----
+  E125: {
+    K1A2: { front: [0.13, 0.05], side: [0.92, 0.8], rear: [0.96, 0.92] }, // 125mm: 정면은 K1A2 복합장갑이 대개 막는다
+    K2: { front: [0.12, 0.05], side: [0.7, 0.55], rear: [0.9, 0.8] },
+  },
+  ATGM: { // 탠덤 성형작약: 거리와 상관없음
+    K1A2: { front: [0.25, 0.25], side: [0.92, 0.92], rear: [0.97, 0.97] },
+    K2: { front: [0.18, 0.18], side: [0.88, 0.88], rear: [0.96, 0.96] },
+  },
+  ATR: { // 정면은 거의 못 뚫고, 옆·뒤를 노린다
+    K1A2: { front: [0.07, 0.07], side: [0.5, 0.5], rear: [0.8, 0.8] },
+    K2: { front: [0.05, 0.05], side: [0.42, 0.42], rear: [0.75, 0.75] },
+  },
 };
+
+// M8a: 위에서 맞는 공격(자폭 드론·포병 직격)의 관통 확률 — 전차 윗면은 얇다 (게임용 추정치)
+TMM.TOP_PEN = { K1A2: 0.7, K2: 0.65 };
 
 /*
  * 차종. M3 에서 더한 필드:
@@ -148,6 +214,66 @@ TMM.VEHICLES = {
     killOnPen: 0.5,
     turnDegPerSec: 30,
     crewRoles: ['cmdr', 'gunner', 'driver'],
+  },
+  // ---- M8a 새 적 (근거 없는 수치는 모두 게임용 추정치) ----
+  // 폭풍호: 공개 자료상 천마호 다음 세대 북한 전차, 125mm 활강포·개량된 사격통제장치로 알려짐. 수가 적은 선발 부대.
+  POKPUNG: {
+    id: 'POKPUNG',
+    name: '폭풍호',
+    cls: 'tank',
+    iff: false,
+    size: 1,
+    roundTurret: true,
+    gun: '125mm 활강포',
+    ammoLoad: { E125: 30 },
+    ammoTypes: ['E125'],
+    reloadSec: 7.5,
+    aimSec: 4,
+    moveFireMul: 0.35, // 안정화 장치가 있어 움직이며 쏘기도 한다 (천마호는 못 함) — 그래도 잘 안 맞음
+    targetMoveMul: 0.62,
+    canFireOnMove: true,
+    killOnPen: 0.62,
+    turnDegPerSec: 22,
+  },
+  // 천마-20: 가상의 최신 개량형. 하드킬 능동방어체계(날아오는 고폭탄을 일정 확률로 요격, 횟수 제한, 철갑탄은 못 막음),
+  // 정면 복합장갑, 불새-3 대전차미사일. 숨어서 장거리 미사일을 쏜다 (js/game/missiles.js).
+  CHONMA20: {
+    id: 'CHONMA20',
+    name: '천마-20',
+    cls: 'tank',
+    iff: false,
+    size: 1,
+    roundTurret: true,
+    gun: '125mm 활강포 + 불새-3',
+    ammoLoad: { E125: 28 },
+    ammoTypes: ['E125'],
+    missiles: 2, // 불새-3 (게임용 추정치)
+    aps: { charges: 2, p: 0.75, vs: ['K277'] }, // 능동방어체계: 고폭탄 요격 확률·횟수 (게임용 추정치)
+    reloadSec: 8.5, // 미사일 장비로 포탑이 좁다 (게임용 추정치)
+    aimSec: 4,
+    moveFireMul: 0.55,
+    targetMoveMul: 0.62,
+    canFireOnMove: true,
+    killOnPen: 0.55,
+    turnDegPerSec: 22,
+  },
+  // 보병 대전차조: 숲·시가지에 숨어 있다가 가까이 온 전차의 옆·뒤를 노린다. 고폭탄과 기관총이 잘 듣는다.
+  ATINF: {
+    id: 'ATINF',
+    name: '대전차조',
+    cls: 'infantry',
+    iff: false,
+    soft: true,
+    size: 0.45, // 흩어져 엎드린 3~4명 (게임용 추정치)
+    ammoLoad: { ATR: 3 },
+    ammoTypes: ['ATR'],
+    reloadSec: 22, // 로켓 재장전·자리 옮기기 (게임용 추정치)
+    aimSec: 4,
+    moveFireMul: 0,
+    targetMoveMul: 0.65,
+    canFireOnMove: false,
+    killOnPen: 0.6, // 고폭탄이 맞으면 조가 전투력을 잃을 확률, 아니면 사상자 (게임용 추정치)
+    turnDegPerSec: 120,
   },
   TRUCK: {
     id: 'TRUCK',

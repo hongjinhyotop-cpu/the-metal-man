@@ -1,7 +1,7 @@
 /*
  * 무전 기록 창.
  * kind: 'order' 지시 | 'report' 보고 | 'warn' 경고 | 'system' 체계 | 'crew' 승무원 말 (M5) | 'trust-up'·'trust-down' 신뢰도 변화 (M5)
- *       'fire' 사격 | 'kill' 격파 | 'loss' 아군 손실 | 'ff' 오인사격 | 'garble' 잡음
+ *       'fire' 사격 | 'kill' 격파 | 'loss' 아군 손실 | 'ff' 오인사격 | 'garble' 잡음 | 'threat' M8a 포격·미사일·드론 경고
  * M7.5: 간단 보기에서는 최근 SIMPLE_N(5)줄만, 승무원 잡담(crew)은 빼고 보여 준다. '전체 보기' 단추나 상세 보기면 전부.
  *       중요한 줄(피격·격파·손실·오인사격·경고)은 왼쪽 색 막대로 강조한다.
  */
@@ -11,7 +11,7 @@ TMM.RadioLog = (function () {
   let moreBtn = null;
   let localFull = false;
   const SIMPLE_N = 5;
-  const IMPORTANT = { warn: 1, kill: 1, loss: 1, ff: 1 };
+  const IMPORTANT = { warn: 1, kill: 1, loss: 1, ff: 1, threat: 1 }; // M8a threat: 포격·미사일·드론 경고
   const recentLines = []; // M6: 조준 화면에 짧게 흘려 보여 줄 최근 줄
 
   function init(el) {

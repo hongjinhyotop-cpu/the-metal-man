@@ -192,7 +192,7 @@ TMM.ScopeView = (function () {
     const tw = w * (0.38 + 0.22 * (1 - side)), th = h * 0.36;
     const tcx = cx - front * side * w * 0.04;
     const ty = by - hullH - th;
-    if (t.model === 'CHONMA') {
+    if (t.model === 'CHONMA' || TMM.VEHICLES[t.model].roundTurret) {
       ctx.beginPath();
       ctx.ellipse(tcx, by - hullH, tw / 2, th, 0, Math.PI, 0);
       ctx.fill();
@@ -965,7 +965,18 @@ TMM.ScopeView = (function () {
     ctx.fillText('Tab 지도로', W - 12, 12);
     ctx.font = '500 10px ' + FONT_SANS;
     ctx.fillStyle = '#c3c8a6';
-    ctx.fillText(fitText(ctx, '무전 명령 불가 · 8·9·0 사격 통제 · R 보고', Math.min(290, W * 0.2) - 8), W - 12, 28);
+    ctx.fillText(fitText(ctx, '무전 명령 불가 · 8·9·0 사격 통제 · R 보고 · G 연막', Math.min(290, W * 0.2) - 8), W - 12, 28);
+
+    // M8a: 내 전차가 연막 속이면 조준경이 뿌옇다 (서로 안 보임)
+    if (TMM.Smoke && TMM.Smoke.covers(game, u)) {
+      ctx.fillStyle = night ? 'rgba(150, 150, 150, 0.62)' : 'rgba(190, 192, 180, 0.62)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '700 15px ' + FONT_SANS;
+      ctx.fillStyle = '#2a2c22';
+      ctx.fillText('연막 속 — 앞이 보이지 않음', W / 2, H * 0.32);
+    }
 
     drawHullIcon(ctx, game, u, W, H, night);
     drawMiniLog(ctx, game, W, H);

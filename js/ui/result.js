@@ -37,9 +37,12 @@ TMM.Result = (function () {
     const camp = opts && opts.campaign;
     next = camp ? 'campaign' : 'training';
     const lost = game.units.filter((u) => u.destroyed).length;
-    const kills = game.enemies.filter((e) => e.destroyed && !e.abandoned).length;
-    const aband = game.enemies.filter((e) => e.abandoned).length;
-    const gone = game.enemies.filter((e) => e.exited && !(e.ai && e.ai.pending)).length;
+    // M8a: 전차와 보병 대전차조를 나눠 센다
+    const tanks = game.enemies.filter((e) => TMM.VEHICLES[e.model].cls === 'tank');
+    const teams = game.enemies.filter((e) => e.model === 'ATINF');
+    const kills = tanks.filter((e) => e.destroyed && !e.abandoned).length;
+    const aband = tanks.filter((e) => e.abandoned).length;
+    const gone = tanks.filter((e) => e.exited && !(e.ai && e.ai.pending)).length;
     const allyLost = game.allies.filter((a) => a.destroyed).length;
     let shots = 0, hits = 0;
     for (const u of game.units) { shots += u.stats.shots; hits += u.stats.hits; }
@@ -55,11 +58,14 @@ TMM.Result = (function () {
       : !win
       ? '소대 전차 ' + lost + '대가 격파되어 소대가 전투력을 잃었습니다.'
       : gone || aband
-        ? '적 천마호 소대가 전투력을 잃고 북쪽으로 퇴각했습니다.'
-        : '적 천마호 전차 소대를 격멸했습니다.';
+        ? '적 전차 소대가 전투력을 잃고 북쪽으로 퇴각했습니다.'
+        : '적 전차 소대를 격멸했습니다.';
 
     const rows = [
-      ['적 전차 격파', kills + ' / ' + game.enemies.length + ' 대' + (aband ? ' (유기 ' + aband + '대 별도)' : '') + (gone ? ' · 퇴각 ' + gone + '대' : '')],
+      ['적 전차 격파', kills + ' / ' + tanks.length + ' 대' + (aband ? ' (유기 ' + aband + '대 별도)' : '') + (gone ? ' · 퇴각 ' + gone + '대' : '')],
+      ...(teams.length ? [['보병 대전차조', '제압 ' + teams.filter((e) => e.destroyed).length + ' · 흩어짐 ' + teams.filter((e) => e.exited).length + ' / ' + teams.length + ' 조']] : []),
+      ...(game.missileStats && game.missileStats.n ? [['날아온 미사일', game.missileStats.n + ' 발 (연막·엄폐로 유도가 끊김 ' + game.missileStats.lost + ')']] : []),
+      ...(game.indirect && game.indirect.nStrikes ? [['적 포격', game.indirect.nStrikes + ' 회']] : []),
       ['아군 손실', lost + ' / ' + game.units.length + ' 대'],
       ['사용 탄약', shots + ' 발 (명중 ' + hits + ' 발' + (shots ? ', ' + Math.round((hits / shots) * 100) + '%' : '') + ')'],
       ['1호차 직접 조준', manualText(game)],

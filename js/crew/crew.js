@@ -589,6 +589,7 @@ TMM.Crew = (function () {
     front: { cmdr: 2, gunner: 3, loader: 2, driver: 1 },
     side: { cmdr: 1, gunner: 1, loader: 2, driver: 2 },
     rear: { cmdr: 1, gunner: 0.5, loader: 1, driver: 3 },
+    top: { cmdr: 3, gunner: 1.5, loader: 2, driver: 0.5 }, // M8a 자폭 드론·포병 직격 (포탑 윗면)
   };
   function pickHurt(game, u, aspect) {
     const w = HURT_W[aspect] || HURT_W.side;
@@ -812,6 +813,6 @@ TMM.Crew = (function () {
     init, snapshot, update, onEvents, finish,
     eff, aimMul, reloadMul, hitMul, speedMul, idMul, radioFactor,
     afterShot, earlyFire, noteOrder, interpret, beforeAck, ackBody, onExecuted, spotLine, onDirectOrder,
-    summaries, trustLabel, statusWord, heated, member, personDef, noLoader,
+    summaries, trustLabel, statusWord, heated, member, personDef, noLoader, hurt, // M8a hurt: 포병 파편 부상 (indirect.js)
   };
 })();

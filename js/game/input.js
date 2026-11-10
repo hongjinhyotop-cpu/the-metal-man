@@ -5,7 +5,7 @@
  *   전차 클릭 / 1~4: 전차 선택 (받는 대상도 그 전차로) · 5 1조 · 6 2조 · 7 소대 전체
  *   지도 클릭: 고른 명령의 위치 지정. 명령을 고르지 않았으면 지휘 전차(1호차)만 이동.
  *   표적 클릭: 받는 대상에게 목표 지정 (1호차는 바로, 2·3·4호차는 무전)
- *   M 이동 · C 엄호 · B 엄호 이동 · T 목표 지정 · W 철수 · S 정지 · R 상황 보고
+ *   M 이동 · C 엄호 · B 엄호 이동 · T 목표 지정 · W 철수 · S 정지 · R 상황 보고 · G 연막(M8a, 조준 화면에서도 내 전차)
  *   8 사격 금지 · 9 식별 후 사격 · 0 자유 사격
  *   Q 탄종 전환(1호차) · X 목표 해제 · V 시야 표시 · 스페이스바 일시정지 · Esc/오른쪽 클릭 취소
  *   M6 Tab: 지도 ↔ 1호차 조준 화면. 조준 화면에서는 마우스 조준·좌클릭 발사·L(또는 오른쪽 클릭) 레이저·Q 탄종·
@@ -140,6 +140,7 @@ TMM.Input = (function () {
       if (digit === '9') return actions.setRoe('id');
       if (digit === '0') return actions.setRoe('free');
       if (ev.code === 'KeyR') return actions.pickOrder('report');
+      if (ev.code === 'KeyG') return actions.scopeSmoke(); // M8a: 내 전차 연막
       if (digit && '1234'.includes(digit)) return actions.select(Number(digit)); // 정보 창만 바뀜
       if (digit || ['KeyM', 'KeyC', 'KeyB', 'KeyT', 'KeyX', 'KeyV', 'KeyK'].includes(ev.code)) actions.scopeBlocked();
     }
@@ -173,7 +174,7 @@ TMM.Input = (function () {
       if (digit === '8') return actions.setRoe('hold');
       if (digit === '9') return actions.setRoe('id');
       if (digit === '0') return actions.setRoe('free');
-      const ORDER_KEYS = { KeyM: 'move', KeyC: 'cover', KeyB: 'bound', KeyT: 'target', KeyW: 'withdraw', KeyS: 'stop', KeyR: 'report', KeyK: 'support' };
+      const ORDER_KEYS = { KeyM: 'move', KeyC: 'cover', KeyB: 'bound', KeyT: 'target', KeyW: 'withdraw', KeyS: 'stop', KeyR: 'report', KeyK: 'support', KeyG: 'smoke' }; // M8a G 연막
       if (ORDER_KEYS[ev.code]) return actions.pickOrder(ORDER_KEYS[ev.code]);
       if (ev.code === 'KeyQ') return actions.cycleAmmo();
       if (ev.code === 'KeyX') return actions.clearTarget();

@@ -1,8 +1,9 @@
 // 모의 캠페인 (개발용, 게임에는 쓰이지 않음). Node 로 실행:
-//   node tools/sim-campaign.js <good|scope|passive> [횟수] [시드] [재정비: rec|idle] [흑표 지원: 1|0]
+//   node tools/sim-campaign.js <good|naive|scope|passive> [횟수] [시드] [재정비: rec|idle] [흑표 지원: 1|0]
 //   재정비 rec = '추천대로 하기'(Campaign.recommend), idle = 아무것도 안 함(필수 자리만 보충병). 기본: passive 는 idle, 나머지는 rec.
 //   흑표 지원 기본: good 만 1 (보이는 적 쪽 / 공격 작전은 목표 쪽으로 한 번 요청)
-//   good: 엄호 방향·표적 지정·단계적 이동/엄호 이동 / scope: 조준 화면에만(무전 명령 없음, 공격 작전에서는 1호차만 몰고 감) / passive: 아무것도 안 함
+//   good: 엄호 방향·표적 지정·단계적 이동/엄호 이동 + M8a 새 위협 대처(미사일 → 연막, 포격 경고 → 원 밖으로, 자폭 드론 → 움직임)
+//   naive: good 과 같지만 새 위협에 대처하지 않음 / scope: 조준 화면에만(무전 명령 없음, 공격 작전에서는 1호차만 몰고 감) / passive: 아무것도 안 함
 // 결과: 캠페인마다 작전별 결과(s 성공·f 실패·c 소대 붕괴, -손실, k격파/적 수, 걸린 분)와 엔딩, 마지막에 합계.
 // 모의 캠페인: 전략별로 5개 작전을 이어서 돌린다.
 const loadTMM = require('./sim-load.js');
@@ -21,9 +22,10 @@ function visibleHostiles(g, u) {
     if (!I.sees(g, u, t)) continue;
     const d = TMM.Ballistics.distanceM(g.map, u, t);
     if (d > 3000) continue;
-    out.push({ t, d });
+    if (TMM.VEHICLES[t.model].cls !== 'tank') continue; // M8a: 목표 지정은 전차만 (보병 대전차조는 승무원이 알아서 고폭탄·기관총으로)
+    out.push({ t, d, k: d });
   }
-  return out.sort((a, b) => a.d - b.d);
+  return out.sort((a, b) => a.k - b.k);
 }
 function assignTargets(g, st) {
   if (g.gameSeconds - (st.lastAssign || 0) < 4) return;
@@ -53,8 +55,9 @@ const GOOD = {
   delay(g, st) {
     const t = at(g);
     const idle = (team) => g.units.filter((u) => !u.destroyed && u.team === team).every((u) => u.state !== 'moving');
-    once(st, 'd0', () => { issue(g, 'T1', { type: 'cover', x: 96, y: 40 }); issue(g, 'T2', { type: 'cover', x: 114, y: 36 }); });
-    if (t > 3.2 * 60) once(st, 'd0e', () => issue(g, '4', { type: 'cover', x: 140, y: 70 }));
+    // 작전 명령에 동쪽 2제대(3분 뒤)가 나와 있으므로 4호차는 처음부터 동쪽, 3분이 되면 3호차도 동쪽 (M8a: 흑표 하향에 맞춘 봇 지휘 보강)
+    once(st, 'd0', () => { issue(g, 'T1', { type: 'cover', x: 96, y: 40 }); issue(g, '3', { type: 'cover', x: 114, y: 36 }); issue(g, '4', { type: 'cover', x: 140, y: 70 }); });
+    if (t > 2.8 * 60) once(st, 'd0e', () => issue(g, '3', { type: 'cover', x: 140, y: 72 }));
     if (t > 6 * 60) once(st, 'd1', () => { issue(g, 'T1', { type: 'move', x: 90, y: 80 }); issue(g, 'T2', { type: 'move', x: 106, y: 84 }); st.d1at = g.gameSeconds; });
     if (st.d1at && !st.d2 && g.gameSeconds - st.d1at > 20) {
       if (idle(1)) once(st, 'd1c1', () => issue(g, 'T1', { type: 'cover', x: 92, y: 60 }));
@@ -76,7 +79,7 @@ const GOOD = {
 };
 function attack(g, st, wps) {
   st.wp = st.wp || 0;
-  const anyVisible = [...g.intel.friend.contacts.values()].some((c) => c.visible && !c.wreck && c.kind === 'hostile' && c.identified);
+  const anyVisible = [...g.intel.friend.contacts.values()].some((c) => c.visible && !c.wreck && c.kind === 'hostile' && c.identified && c.cls === 'tank'); // M8a: 보병은 기관총에 맡기고 전차가 보일 때만 멈춤
   if (!g.bound && !st.moving && st.wp < wps.length && (!anyVisible || g.gameSeconds - (st.waitFrom || 0) > 180)) {
     const [x, y] = wps[st.wp++];
     issue(g, 'ALL', { type: 'bound', x, y });
@@ -147,8 +150,63 @@ function callSupport(g, st) {
   }
 }
 
+// M8a: 새 위협에 대처 (사람이 경고를 보고 하는 것 흉내) — 지난 틱의 사건(st.events)을 본다
+//   미사일 경고 → 노린 전차에 연막 · 포격 경고 → 원 안의 전차를 원 밖으로 · 자폭 드론 경고 → 노린 전차를 조금 움직임
+function react(g, st) {
+  const mpc = g.map.metersPerCell;
+  for (const ev of st.events || []) {
+    if (ev.type === 'missile-warn') {
+      const t = ev.missile.target;
+      if (t.side === 'friend' && !t.ally && !t.destroyed && t.smoke > 0) issue(g, String(t.id), { type: 'smoke' });
+    } else if (ev.type === 'arty-warn') {
+      const s = ev.strike;
+      for (const u of g.units) {
+        if (u.destroyed || u.damage.track) continue;
+        const d = Math.hypot(u.x - s.x, u.y - s.y);
+        if (d > s.r + 40 / mpc) continue;
+        // 원 밖으로: 아는 적에게서 먼 쪽(뒤쪽)을 고른다 — 적 앞으로 나가 옆구리를 보이지 않게
+        const foes = [...g.intel.friend.contacts.values()].filter((c) => c.known && !c.wreck && c.kind !== 'friendly');
+        const far = (q) => (foes.length ? Math.min(...foes.map((c) => Math.hypot(c.lastX - q.x, c.lastY - q.y))) : q.y);
+        let p = null, best = -Infinity;
+        for (let k = 0; k < 12; k++) {
+          const a = (k / 12) * Math.PI * 2;
+          const q = { x: s.x + Math.cos(a) * (s.r + 80 / mpc), y: s.y + Math.sin(a) * (s.r + 80 / mpc) };
+          const info = g.map.infoAt(q.x, q.y);
+          if (!info || !info.speed) continue;
+          const sc = far(q) - Math.hypot(q.x - u.x, q.y - u.y) * 0.5;
+          if (sc > best) { best = sc; p = q; }
+        }
+        // 보이는 적과 맞서 싸우는 중(2km 안)이면 자리를 지킨다 — 포격을 피하려다 옆구리를 보이는 것이 더 위험
+        if (foes.some((c) => c.visible && Math.hypot(c.lastX - u.x, c.lastY - u.y) * mpc < 2000)) continue;
+        if (p) { issue(g, String(u.id), { type: 'move', x: p.x, y: p.y }); st.artyMoved = st.artyMoved || {}; st.artyMoved[u.id] = { at: g.gameSeconds, watch: u.watch }; }
+      }
+    } else if (ev.type === 'kami-warn') {
+      const t = ev.target;
+      if (t && t.side === 'friend' && !t.ally && !t.destroyed && !t.damage.track && t.state !== 'moving') {
+        const a = t.heading + Math.PI / 2;
+        for (const r of [5, -5, 4, -4]) {
+          const q = { x: t.x + Math.cos(a) * r, y: t.y + Math.sin(a) * r };
+          const info = g.map.infoAt(q.x, q.y);
+          if (info && info.speed) { issue(g, String(t.id), { type: 'move', x: q.x, y: q.y }); break; }
+        }
+      }
+    }
+  }
+  // 포격을 피해 옮긴 전차는 도착하면 다시 원래 방향을 엄호
+  for (const id in st.artyMoved || {}) {
+    const u = g.units.find((x) => x.id === Number(id));
+    const m = st.artyMoved[id];
+    if (!u || u.destroyed) { delete st.artyMoved[id]; continue; }
+    if (u.state !== 'moving' && g.gameSeconds - m.at > 15) {
+      if (m.watch != null) issue(g, id, { type: 'cover', x: u.x + Math.cos(m.watch) * 20, y: u.y + Math.sin(m.watch) * 20 });
+      delete st.artyMoved[id];
+    }
+  }
+}
+
 const STRATS = {
-  good: (g, st) => { callSupport(g, st); GOOD[g.op.key](g, st); },
+  good: (g, st) => { react(g, st); callSupport(g, st); GOOD[g.op.key](g, st); },
+  naive: (g, st) => { callSupport(g, st); GOOD[g.op.key](g, st); }, // M8a: 좋은 지휘지만 새 위협에 대처하지 않음 (비교용)
   scope: (g, st, realDt) => {
     st.findDelay = 0.7; st.hold = 1.3;
     // 공격 작전: 다른 전차에는 명령하지 않고, 1호차만 (지도를 잠깐 열어 클릭해) 목표 쪽으로 몰고 간다
@@ -170,7 +228,7 @@ const STRATS = {
 function runCampaign(strat, seed, refitMode, support) {
   const rand = mulberry(seed);
   refitMode = refitMode || (strat === 'passive' ? 'idle' : 'rec');
-  if (support == null) support = strat === 'good';
+  if (support == null) support = strat === 'good' || strat === 'naive';
   const s = TMM.Campaign.newState(); s.phase = 'briefing';
   const ops = [];
   while (s.phase !== 'ending') {
@@ -183,7 +241,7 @@ function runCampaign(strat, seed, refitMode, support) {
       const combat = TMM.Battle.inCombat(g);
       const realDt = 0.5 / (combat ? 3 : 10);
       STRATS[strat](g, st, realDt);
-      TMM.Battle.step(g, 0.5);
+      st.events = TMM.Battle.step(g, 0.5);
       if (g.gameSeconds - g.startSeconds > 7200) { console.log('TIMEOUT'); break; }
     }
     ops.push({ no: op.no, r: g.over.result[0], lost: g.units.filter((u) => u.destroyed).length, kills: g.enemies.filter(e=>e.destroyed&&!e.abandoned).length, n: g.enemies.length, min: Math.round((g.over.at - g.startSeconds)/60), k2: g.units.filter((u) => u.model === 'K2').length, sup: g.support.state });

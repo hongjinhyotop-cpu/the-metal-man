@@ -49,6 +49,7 @@
       <button type="button" id="scope-exit" class="scope-exit" hidden title="조준 화면을 닫고 지도로 (Tab)">◀ 지도로 <kbd>Tab</kbd></button>
       <div id="ctx-menu" class="ctx-menu" role="menu" hidden></div>
       <div id="tut" class="tut" hidden></div>
+      <div id="threat-tip" class="threat-tip" role="status" aria-live="polite" hidden></div>
       <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
       <div id="op-hud" class="op-hud" hidden></div>
       <div id="start" class="start" hidden>
@@ -71,9 +72,19 @@
           </p>
           <p class="s-brief">
             <b>[조준 화면]</b> 버튼(Tab)으로 1호차를 직접 쏠 수 있습니다. 더 빠르고 정확하지만 그동안은 무전 지휘를 못 합니다.
+            미사일이 날아오면 <b>[연막]</b>(G) — 전차마다 2번씩 쓸 수 있습니다.
             조작이 헷갈리면 언제든 오른쪽 위 <b>[? 조작법]</b>(F1)을 누르십시오.
           </p>
           <p class="s-brief">승리: 적을 모두 격파하거나, 전투력을 잃은 적이 지도 북쪽 끝 밖으로 물러나면 작전 성공. 패배: 소대 전차 4대 중 3대가 격파되면 작전 실패.</p>
+          <div class="s-label">적 구성</div>
+          <div class="s-opts" role="group" aria-label="적 구성">
+            <button type="button" data-mix="chonma" aria-pressed="true">
+              <b>천마호만</b><span>천마호 전차 4대 · 지금까지의 실전 훈련</span>
+            </button>
+            <button type="button" data-mix="mixed" aria-pressed="false">
+              <b>혼합</b><span>폭풍호·천마-20(미사일)·보병 대전차조 + 포병·정찰 드론·자폭 드론 · 새 위협 연습</span>
+            </button>
+          </div>
           <div class="s-label">작전 시간</div>
           <div class="s-opts" role="group" aria-label="주간 또는 야간">
             <button type="button" data-light="day" aria-pressed="true">
@@ -177,7 +188,7 @@
           <ul>
             <li><b>땅을 우클릭</b> → 이동 · 엄호(그쪽 지켜봐) · 철수</li>
             <li><b>적을 우클릭</b> → 목표 지정</li>
-            <li><b>내 전차를 우클릭</b> → 정지 · 상황 보고</li>
+            <li><b>내 전차를 우클릭</b> → 정지 · 상황 보고 · <b>연막</b></li>
             <li>1호차는 <b>지도 클릭</b>만으로 바로 이동</li>
             <li>오른쪽 <b>명령 버튼</b>을 누르고 지도를 클릭해도 됩니다</li>
           </ul>
@@ -197,6 +208,7 @@
             <dt>M · C · W</dt><dd>이동 · 엄호 · 철수 (→ 지도 클릭)</dd>
             <dt>T</dt><dd>목표 지정 (→ 표적 클릭)</dd>
             <dt>S · R</dt><dd>정지 · 상황 보고</dd>
+            <dt>G</dt><dd>연막 (전차마다 작전당 2회)</dd>
             <dt>Esc</dt><dd>취소 · 메뉴 닫기</dd>
             <dt>F1</dt><dd>이 카드</dd>
           </dl>
@@ -217,6 +229,15 @@
             <li><span class="sym sym-enemy"></span><span>적</span></li>
             <li><span class="sym sym-ally"></span><span>아군 (보병·트럭·K2)</span></li>
             <li><span class="sym sym-watch"></span><span>엄호 중 — 지켜보는 방향</span></li>
+          </ul>
+          <h3>새 위협 대응</h3>
+          <ul class="h-threats">
+            <li><b>붉은 원</b> 포격 경고 → 원 밖으로 이동</li>
+            <li><b>미사일!</b> → 연막(G) 또는 엄폐물 뒤로</li>
+            <li><b>정찰 드론</b> → 숲으로·자리 옮기기 (발견되면 포격)</li>
+            <li><b>자폭 드론</b> → 멈추지 말 것, 숲·연막 속으로</li>
+            <li><b>대전차조</b> → 숲·건물에 붙지 말고 고폭탄</li>
+            <li><b>천마-20</b> → 철갑탄 (고폭탄은 요격됨)</li>
           </ul>
           <h3>요령</h3>
           <p class="h-small">가만히 있으면 옆구리를 맞습니다. <b>조마다 엄호 방향</b>을 정해 주고, 보이는 적에게 <b>목표 지정</b>. 무전 기록의 <b class="h-red">붉은 줄</b>(피격·격파·경고)을 먼저 보세요.</p>
@@ -249,6 +270,9 @@
   <script src="js/radio/radio-net.js"></script>
   <script src="js/game/command.js"></script>
   <script src="js/game/support.js"></script>
+  <script src="js/game/smoke.js"></script>
+  <script src="js/game/missiles.js"></script>
+  <script src="js/game/indirect.js"></script>
   <script src="js/crew/crew-data.js"></script>
   <script src="js/crew/crew.js"></script>
   <script src="js/ai/enemy-ai.js"></script>
@@ -266,6 +290,7 @@
   <script src="js/ui/tutorial.js"></script>
   <script src="js/ui/campaign-ui.js"></script>
   <script src="js/render/terrain-layer.js"></script>
+  <script src="js/render/threat-layer.js"></script>
   <script src="js/render/renderer.js"></script>
   <script src="js/render/scope-view.js"></script>
   <script src="js/game/input.js"></script>

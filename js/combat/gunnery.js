@@ -64,6 +64,8 @@ TMM.Gunnery = (function () {
     const m = I().fireMods(game, unit, target);
     const tank = TMM.VEHICLES[target.model].cls === 'tank';
     let want = tank && (m.hullDown || m.obs >= 0.25) && d <= 2000 ? 'K277' : tank ? 'K276' : 'K277';
+    // M8a: 능동방어체계가 고폭탄을 요격하는 것을 본 표적에는 철갑탄 (요격 못 함)
+    if (tank && target.apsSeen && target.aps > 0) want = 'K276';
     if (d > TMM.AMMO[want].rangeM || unit.ammo[want] <= 0) want = want === 'K277' ? 'K276' : 'K277';
     if (unit.ammo[want] > 0 && d <= TMM.AMMO[want].rangeM) unit.ammoType = want;
   }
@@ -111,6 +113,8 @@ TMM.Gunnery = (function () {
       if (roe !== 'free' && d > FREE_FIRE_M[side]) continue; // 자유 사격(자동 교전)은 이 거리 안에서만 (더 먼 표적은 지정해야 쏜다)
       if (unit.ai && unit.ai.fireM && d > unit.ai.fireM) continue; // M7a: 진지 방어 적의 매복 — 이 거리 안에 들어올 때까지 숨죽인다
       if (side === 'enemy' && cls !== 'tank' && d > SOFT_MAX_M) continue; // 적은 먼 트럭에 귀한 철갑탄을 쓰지 않는다
+      // M8a 보병 대전차조: 정면을 보이는 전차는 아주 가깝지 않으면 기다린다 (옆·뒤가 보일 때 쏜다)
+      if (unit.ai && unit.ai.kind === 'atteam' && cls === 'tank' && d > 150 && B().aspect(t, unit) === 'front') continue;
       let key = CLS_RANK[cls] * 1e6 + d;
       // 적 포수는 옆구리·뒤를 보이는 전차를 먼저 노린다 (정면은 안 뚫리므로) — 정면이면 1km 더 먼 것처럼 친다
       if (side === 'enemy' && B().aspect(t, unit) === 'front') key += 1000;
@@ -140,7 +144,14 @@ TMM.Gunnery = (function () {
     unit.stats.shots += 1;
     unit.lastFiredAt = game.gameSeconds;
     unit.fire.reload = veh.reloadSec * (TMM.Crew ? TMM.Crew.reloadMul(unit) : 1); // M5: 탄약수
-    const res = B().resolveShot(game.map, unit, target, ammoId, rand, mods || I().fireMods(game, unit, target));
+    let res = B().resolveShot(game.map, unit, target, ammoId, rand, mods || I().fireMods(game, unit, target));
+    // M8a: 능동방어체계(천마-20) — 날아오는 고폭탄을 일정 확률로 요격한다 (횟수 제한, 철갑탄은 못 막음)
+    const aps = TMM.VEHICLES[target.model].aps;
+    if (res.hit && aps && target.aps > 0 && aps.vs.includes(ammoId) && rand() < aps.p) {
+      target.aps -= 1;
+      target.apsSeen = true;
+      res = { distM: res.distM, aspect: res.aspect, pHit: res.pHit, parts: [], destroyed: false, pen: false, hit: false, intercepted: true };
+    }
     if (res.hit) unit.stats.hits += 1;
     const fresh = D().apply(target, res);
     const friendlyFire = target.side === unit.side;
@@ -167,6 +178,8 @@ TMM.Gunnery = (function () {
     const f = unit.fire;
     f.reload = Math.max(0, f.reload - gdt);
     if (unit.destroyed || unit.exited || unit.damage.gun) { f.targetId = null; return; }
+    if (unit.guiding) { f.targetId = null; return; } // M8a: 천마-20 이 미사일을 유도하는 동안은 포를 쏘지 않는다
+    if (unit.ai && unit.ai.suppressedUntil > game.gameSeconds) { f.targetId = null; return; } // M8a: 기관총에 제압된 대전차조
     // M6: 소대장이 조준 화면에 있으면 1호차는 수동 사격 (TMM.Scope.fire). 포수 자동 사격은 쉰다.
     if (TMM.Scope && TMM.Scope.isManual(game, unit)) { f.targetId = null; return; }
     if (!ensureAmmo(unit, events)) { f.targetId = null; return; }
@@ -201,9 +214,37 @@ TMM.Gunnery = (function () {
     fireAt(game, unit, target, rand, events, mods);
   }
 
+  // M8a 공축 기관총: 소대 전차는 주포와 따로, 보이는 '적으로 식별된' 보병(대전차조)을 700m 안에서 쏜다.
+  // 맞으면 잠시 제압(로켓을 못 쏨)되거나 사상자가 난다. 주포 탄을 쓰지 않는다. 수치는 게임용 추정치.
+  const MG = { RANGE_M: 700, BURST_SEC: 3, SUPPRESS_P: 0.4, SUPPRESS_SEC: 14, HIT_P: 0.13 };
+  function machineGun(game, u, gdt, events, rand) {
+    if (u.destroyed || u.exited || (u.roe === 'hold')) return;
+    u.mgT = (u.mgT || 0) + gdt;
+    if (u.mgT < MG.BURST_SEC) return;
+    u.mgT = 0;
+    let best = null, bd = Infinity;
+    for (const t of game.enemies) {
+      if (t.destroyed || t.exited || TMM.VEHICLES[t.model].cls !== 'infantry') continue;
+      if (!I().isHostile(I().contact(game, 'friend', t.id)) || !I().sees(game, u, t)) continue;
+      const d = B().distanceM(game.map, u, t);
+      if (d <= MG.RANGE_M && d < bd) { best = t; bd = d; }
+    }
+    if (!best) return;
+    const near = 1 - bd / MG.RANGE_M * 0.6;
+    if (rand() < MG.SUPPRESS_P * near) best.ai.suppressedUntil = game.gameSeconds + MG.SUPPRESS_SEC;
+    if (rand() < MG.HIT_P * near * (TMM.Crew && u.crew ? TMM.Crew.hitMul(u, bd) : 1)) {
+      const res = { distM: bd, aspect: 'front', parts: [], hit: true, pen: true, destroyed: !!best.hurt || rand() < 0.35, hurt: false };
+      if (!res.destroyed) res.hurt = true;
+      const fresh = D().apply(best, res);
+      if (res.destroyed) u.stats.kills += 1;
+      events.push({ type: 'shot', shooter: u, target: best, ammoId: 'MG', res, fresh, unidentified: false, friendlyFire: false, manual: false });
+    }
+  }
+
   function update(game, gdt, events) {
     const rand = game.rand || Math.random;
     for (const u of game.units) updateUnit(game, u, gdt, events, rand);
+    for (const u of game.units) machineGun(game, u, gdt, events, rand);
     for (const a of game.allies) if (a.support && !a.exited) updateUnit(game, a, gdt, events, rand); // M7b: 흑표 지원 K2
     for (const e of game.enemies) updateUnit(game, e, gdt, events, rand);
   }

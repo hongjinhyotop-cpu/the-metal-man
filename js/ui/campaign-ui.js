@@ -204,6 +204,7 @@ TMM.CampaignUI = (function () {
       '<dt>1. 상황</dt><dd>' + esc(b.situation) + '</dd>' +
       '<dt>2. 임무</dt><dd><b>' + esc(b.mission) + '</b></dd>' +
       '<dt>적 정보</dt><dd>' + esc(b.enemy) + '</dd>' +
+      threatRows(op) +
       '<dt>아군</dt><dd>' + esc(b.friendly) + '</dd>' +
       '<dt>시간대</dt><dd>' + esc(op.when) + (op.light === 'night' ? ' — 어둠 속에서는 K1A2 열상장비가 유리, 적은 잘 못 본다.' : ' — 양쪽 모두 멀리 본다.') + '</dd>' +
       '<dt class="ok">승리 조건</dt><dd>' + esc(b.win) + '</dd>' +
@@ -211,6 +212,7 @@ TMM.CampaignUI = (function () {
       '</dl>' +
       (press ? '<p class="c-press">⚠ ' + esc(press) + '</p>' : '') +
       '<p class="c-tip"><b>장만석 상사</b> ' + esc(b.tip) + '</p>' +
+      threatTips(op) +
       '</div>' +
       '<div class="c-side"><canvas class="c-map" aria-label="작전 지도 요약"></canvas>' +
       '<p class="c-legend"><i class="lg-u"></i>아군 시작 <i class="lg-e"></i>적 진입·진지 <i class="lg-m"></i>목표·저지선</p></div>' +
@@ -259,6 +261,19 @@ TMM.CampaignUI = (function () {
   let plan = null;
   const INJ = ['', '경상', '중상'];
   const ROLE_NAME = (r) => TMM.CREW_ROLES[r].name;
+  // M8a: 작전 명령 화면 — 이번 작전의 새 위협(적 정보 아래)과 장만석 상사의 대응 한 줄씩
+  function threatRows(op) {
+    const T = TMM.CAMPAIGN.THREATS;
+    const list = (op.threats || []).filter((k) => T[k]);
+    if (!list.length) return '';
+    return '<dt class="bad">새 위협</dt><dd><ul class="c-threats">' + list.map((k) => '<li><b>' + esc(T[k].name) + '</b> — ' + esc(T[k].brief) + '</li>').join('') + '</ul></dd>';
+  }
+  function threatTips(op) {
+    const T = TMM.CAMPAIGN.THREATS;
+    const list = (op.threats || []).filter((k) => T[k]);
+    if (!list.length) return '';
+    return '<ul class="c-tips">' + list.map((k) => '<li><b>' + esc(T[k].name) + '</b> "' + esc(T[k].jms) + '"</li>').join('') + '</ul>';
+  }
   const modelTag = (t) => (t.model === 'K2' ? '<span class="c-k2">K2</span>' : '<span class="c-k1">K1A2</span>');
   const hrs = (h) => (Math.round(h * 10) / 10).toString().replace(/\.0$/, '') + '시간';
 
@@ -294,6 +309,7 @@ TMM.CampaignUI = (function () {
       news.push('<li>' + (done < C().K.K2_FROM_OP ? '잃은 전차 보충은 작전 2 이후부터 대대가 검토한다.' : s.k2Count >= C().K.K2_MAX ? '대대의 K2 보충은 이미 다 받았다 (캠페인 최대 ' + C().K.K2_MAX + '대).' : '대대에 전차 보충을 요청했지만 이번에는 오지 않았다 (가능성 약 ' + info.k2Chance + '%). 작전 성과가 좋을수록 잘 온다.') + '</li>');
     }
     for (const id in info.light) news.push('<li>' + id + '호차 승무원이 ' + info.light[id].map((k) => P[k]).join('·') + ' 손상을 자체 정비로 고쳤다.</li>');
+    news.push('<li>연막탄 — 전차마다 ' + TMM.SMOKE.CHARGES + '회분씩 다시 채웠다.</li>'); // M8a
     for (const k of info.returned) news.push('<li class="good">' + esc(C().crewName(k).name) + ' ' + C().crewName(k).rank + ' — 치료를 마치고 복귀 (후방 대기).</li>');
     const lost = C().IDS.filter((id) => !s.tanks[id].alive);
     if (lost.length) news.push('<li class="bad">잃은 전차: ' + lost.map((id) => id + '호차').join(', ') + ' — 승무원은 후방 대기' + (lost.includes(1) && !info.k2 ? '. 소대장은 ' + C().leaderTank(s) + '호차에 동승해 지휘한다' : '') + '.</li>');

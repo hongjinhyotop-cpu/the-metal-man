@@ -22,6 +22,19 @@ TMM.SENSORS = {
     day: { detect: 3000, idBase: 3.5, hitMul: 1 },
     night: { detect: 2300, idBase: 8, hitMul: 0.85 }, // 열상 장비 없음: 밤에는 탐지·식별·사격이 떨어짐 (M4: 1800/12/0.7 → 2300/8/0.85, 야간이 너무 쉬웠음)
   },
+  // M8a (게임용 추정치): 폭풍호는 개량 조준경(야간 일부 열상), 천마-20 은 열상 조준경
+  POKPUNG: {
+    day: { detect: 3200, idBase: 3.2, hitMul: 1 },
+    night: { detect: 2800, idBase: 5, hitMul: 0.92 },
+  },
+  CHONMA20: {
+    day: { detect: 3500, idBase: 3.0, hitMul: 1 },
+    night: { detect: 3200, idBase: 3.4, hitMul: 1 },
+  },
+  ATINF: { // 맨눈·쌍안경 — 멀리는 못 보지만 무전으로 알린다
+    day: { detect: 2000, idBase: 4, hitMul: 1 },
+    night: { detect: 900, idBase: 10, hitMul: 0.75 },
+  },
 };
 
 // 표적 신호: 탐지 거리 배수(sig)와 식별 시간 배수(id)
@@ -31,6 +44,10 @@ TMM.SIGNATURE = {
   CHONMA: { sig: 1, id: 1 },
   TRUCK: { sig: 0.9, id: 1 },
   INF: { sig: 0.35, id: 1.6 }, // 보병은 작아서 잘 안 보이고, 전차·트럭보다 구별이 어렵다
+  // M8a
+  POKPUNG: { sig: 1, id: 1 },
+  CHONMA20: { sig: 0.95, id: 1.1 },
+  ATINF: { sig: 0.26, id: 1.8, flash: 0.3 }, // 엎드린 대전차조: 지도에서 잘 안 보인다. 로켓 후폭풍(flash)도 전차포 섬광보다 작다
 };
 
 TMM.VISION = {

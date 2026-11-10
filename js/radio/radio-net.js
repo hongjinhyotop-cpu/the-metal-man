@@ -37,7 +37,7 @@ TMM.Radio = (function () {
   }
 
   const call = (u) => R().call(u);
-  const cat = (o) => (o.type === 'roe' || o.type === 'target' || o.type === 'report' ? o.type : 'act');
+  const cat = (o) => (o.type === 'roe' || o.type === 'target' || o.type === 'report' || o.type === 'smoke' ? o.type : 'act'); // M8a: 연막은 이동 명령을 대신하지 않는다
   const pkey = (u, o) => u.id + ':' + cat(o);
   // 전차 하나에 전달 중인 명령들
   function pendingFor(game, id) {
@@ -473,7 +473,7 @@ TMM.Radio = (function () {
           const c = ev.contact, t = ev.unit;
           const u = unitById(game, c.seenBy[0]) || ctrl;
           if (!u) break;
-          const what = TMM.VEHICLES[t.model].cls === 'tank' ? '적 천마호 전차' : '적';
+          const what = '적 ' + TMM.VEHICLES[t.model].name + (TMM.VEHICLES[t.model].cls === 'tank' ? ' 전차' : ''); // M8a: 차종별
           report(game, u, '미상 표적 ' + c.label + ', ' + what + '로 식별 (' + t.callsign + '). ' + where(game, u, t) + ', ' + km(c.dist) + '.', { prio: 1 }, out);
           break;
         }
@@ -527,6 +527,8 @@ TMM.Radio = (function () {
         // 지휘 전차: 차내에서 한 발 한 발 다 들린다
         let r;
         if (res.destroyed) r = '격파!' + (ev.unidentified ? ' 확인 결과 ' + t.callsign + '.' : '');
+        else if (res.intercepted) r = '적 능동방어체계가 요격! 철갑탄으로 쏠 것.'; // M8a
+        else if (ev.ammoId === 'MG') r = '사상자 발생, 제압.';
         else if (!res.hit) r = '빗나감.';
         else if (ev.fresh.length) r = '명중. ' + (res.pen ? '' : '외부 손상: ') + ev.fresh.map((k) => TMM.PARTS[k].name).join('·') + ' 손상.';
         else if (res.pen) r = '명중, 관통. 효과 미확인.';
@@ -534,6 +536,9 @@ TMM.Radio = (function () {
         emit(out, intercom(s), tname + '에 ' + what + ' 사격 (' + km(res.distM) + '). ' + r, res.destroyed ? 'kill' : ev.unidentified ? 'warn' : 'fire');
       } else if (res.destroyed) {
         report(game, s, tname + ' 격파. (' + what + ', ' + km(res.distM) + ')', { prio: 1, kind: 'kill' }, out);
+      } else if (res.intercepted && !t.apsReported) {
+        t.apsReported = true; // M8a: 능동방어체계 요격은 처음 한 번 보고
+        report(game, s, t.callsign + ', 능동방어체계로 고폭탄 요격! 철갑탄으로 바꾼다.', { prio: 2, kind: 'warn' }, out);
       } else if (ev.unidentified && now - s.lastUnidLog > 60) {
         s.lastUnidLog = now;
         report(game, s, '미식별 표적' + (c ? ' ' + c.label : '') + '에 사격 중.', { prio: 1, kind: 'warn' }, out);
@@ -562,9 +567,9 @@ TMM.Radio = (function () {
         const others = game.units.filter((u) => !u.destroyed && u !== t);
         others.sort((a, b) => Math.hypot(a.x - t.x, a.y - t.y) - Math.hypot(b.x - t.x, b.y - t.y));
         const by = others[0];
-        if (by) report(game, by, call(t) + ' 피격, 격파됨! (' + ASP()[res.aspect] + ', ' + km(res.distM) + ')', { prio: 3, kind: 'loss' }, out);
+        if (by) report(game, by, call(t) + ' 피격, 격파됨! (' + (ev.indirect || ev.missile ? TMM.AMMO[ev.ammoId].short + ', ' : '') + ASP()[res.aspect] + (ev.indirect ? '' : ', ' + km(res.distM)) + ')', { prio: 3, kind: 'loss' }, out);
       } else {
-        let body = '피탄! ' + ASP()[res.aspect];
+        let body = (ev.indirect || ev.missile ? TMM.AMMO[ev.ammoId].short + ' ' : '') + '피탄! ' + ASP()[res.aspect]; // M8a: 미사일·포탄·자폭 드론
         if (ev.fresh.length) body += (res.pen ? ' 관통. ' : '. ') + ev.fresh.map((k) => PART_LINES[k]).join(', ') + '.';
         else body += res.pen ? ' 관통, 피해 경미.' : ' 장갑이 막아냄.';
         if (ev.selfCover) body += ' 엄폐물로 이동한다.';

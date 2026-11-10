@@ -123,7 +123,9 @@ TMM.Campaign = (function () {
       return { id, x: pos[0], y: pos[1], heading: op.heading, ammo: copy(s.tanks[id].ammo), damage: copy(s.tanks[id].damage), model: s.tanks[id].model || 'K1A2', leader: id === lead };
     });
     let enemies = op.enemies === 'roster-3' ? copy(TMM.Enemy.ROSTER.filter((d) => d.n !== 2)).map((d, i) => Object.assign(d, { n: i + 1 })) : copy(op.enemies || TMM.Enemy.ROSTER);
+    if (op.enemiesExtra) enemies = enemies.concat(copy(op.enemiesExtra)); // M8a: 천마호 편성 뒤에 붙는 적 (보병 대전차조 등)
     if (op.extra && p) enemies = enemies.concat(copy(op.extra.slice(0, p)));
+    enemies.forEach((d, i) => { if (d.n == null || op.enemies === 'roster-3' || op.enemiesExtra) d.n = i + 1; });
     enemies = enemies.map((d, i) => {
       d.id = 101 + i;
       if (!d.static && p && d.route && d.route.length > p + 1) {
@@ -148,6 +150,7 @@ TMM.Campaign = (function () {
       no: op.no, key: op.key, name: op.name, when: op.when, light: op.light, startSeconds: op.startSeconds,
       units, enemies, allies: !!op.allies, rally: op.rally, exits: op.exits,
       objective: copy(op.objective), calls: op.calls ? copy(op.calls).sort((a, b) => a.at - b.at) : [], marks, intro: op.intro.slice(), pressure: p,
+      fires: op.fires ? copy(op.fires) : null, threats: (op.threats || []).slice(), // M8a 포병·드론, 새 위협 안내
     };
   }
 

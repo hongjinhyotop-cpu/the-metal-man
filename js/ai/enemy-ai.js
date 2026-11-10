@@ -46,6 +46,11 @@ TMM.EnemyAI = (function () {
 
   // 후퇴 조건 (게임용 기준): 주포 손상, 탄약 없음, 부위 2곳 이상 손상,
   // 또는 소대가 절반 이상 격파됐는데 자신도 손상됨
+  // 대전차조가 볼 수 있는 가까운 아군 전차가 있는가 (교전 표시용)
+  function th0(game, e) {
+    return threats(game, e).some((t) => t.d <= (e.ai.fireM || 500) && TMM.Intel.sees(game, e, t.c.unit));
+  }
+
   function shouldRetreat(game, e) {
     const parts = D().damagedParts(e).length;
     const lost = game.enemies.filter((x) => x.destroyed).length;
@@ -54,6 +59,7 @@ TMM.EnemyAI = (function () {
 
   // 싸울 수 있는 전차: 살아 있고, 주포·탄약이 있고, 움직일 수 있고, 손상 부위 1곳 이하
   function effective(e) {
+    if (e.model === 'ATINF') return false; // M8a: 보병 대전차조만 남으면 적 기갑은 무너진 것
     if (e.ai.pending) return true; // M7a: 아직 오는 중인 제대가 있으면 소대(전체)는 무너지지 않았다
     return !e.destroyed && !e.exited && D().canFire(e) && D().canMove(e) && D().damagedParts(e).length <= 1 && e.ai.mode !== 'retreat';
   }
@@ -81,6 +87,7 @@ TMM.EnemyAI = (function () {
     game.enemyBroken = true;
     events.push({ type: 'enemy-break' });
     for (const e of alive) {
+      if (e.model === 'ATINF') { disperse(e, events); continue; } // M8a: 대전차조는 흩어져 사라진다
       if (!D().canMove(e)) {
         // 움직일 수 없는 전차는 승무원이 버리고 떠난다
         e.abandoned = true;
@@ -93,6 +100,15 @@ TMM.EnemyAI = (function () {
       e.ai.repath = 0;
       e.targetId = null;
     }
+  }
+
+  // M8a: 보병 대전차조가 흩어져 물러남 (지도에서 사라짐)
+  function disperse(e, events) {
+    if (e.exited || e.destroyed) return;
+    e.exited = true;
+    e.ai.dispersed = true;
+    TMM.Movement.stop(e);
+    events.push({ type: 'enemy-disperse', unit: e });
   }
 
   // 집결 완료 판단: 살아서 싸울 수 있는 전차가 모두 집결지에 왔거나, 기다린 시간이 다 됨
@@ -125,6 +141,25 @@ TMM.EnemyAI = (function () {
       }
       if (e.destroyed || e.exited) continue;
       const ai = e.ai;
+      // M8a 보병 대전차조: 매복 자리에서 움직이지 않는다. 로켓을 다 쏘거나 사상자가 나면 흩어진다.
+      if (ai.kind === 'atteam') {
+        if (D().totalAmmo(e) <= 0 || (e.hurt && !ai.hurtChecked && (ai.hurtChecked = true) && game.rand() < 0.5)) { disperse(e, events); continue; }
+        if (th0(game, e)) {
+          if (ai.mode !== 'engage') { ai.mode = 'engage'; events.push({ type: 'enemy-engage', unit: e }); }
+          if (e.state === 'moving') TMM.Movement.stop(e);
+          continue;
+        }
+        // 매복 자리까지 숲을 따라 걸어간다 (route 가 있을 때)
+        ai.repath = Math.max(0, ai.repath - gdt);
+        if (ai.wp < ai.route.length && e.state !== 'moving' && ai.repath <= 0) {
+          const w = ai.route[ai.wp];
+          if (Math.hypot(e.x - w.x, e.y - w.y) < 1) ai.wp += 1;
+          else { TMM.Movement.order(game.map, e, w.x, w.y); ai.repath = 15; }
+        }
+        continue;
+      }
+      // M8a 천마-20: 미사일을 유도하는 동안은 멈춰 있다 (missiles.js)
+      if (e.guiding) { if (e.state === 'moving') TMM.Movement.stop(e); continue; }
       ai.repath = Math.max(0, ai.repath - gdt);
       ai.wait = Math.max(0, ai.wait - gdt);
 

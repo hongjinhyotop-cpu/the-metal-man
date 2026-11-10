@@ -78,13 +78,15 @@ TMM.Objective = (function () {
     const op = game.op, ob = op.objective;
     const left = Math.max(0, ob.timeLimit - elapsed(game));
     const mm = Math.floor(left / 60), ss = Math.floor(left % 60);
-    const enemyLeft = game.enemies.filter((e) => !e.destroyed && (!e.exited || e.ai.pending)).length;
+    // M8a: 남은 적은 전차만 센다 (숨은 보병 대전차조의 수는 알려 주지 않는다)
+    const tanks = game.enemies.filter((e) => TMM.VEHICLES[e.model].cls === 'tank');
+    const enemyLeft = tanks.filter((e) => !e.destroyed && (!e.exited || e.ai.pending)).length;
     return {
       title: '작전 ' + op.no + ' · ' + op.name,
       goal: ob.short,
       time: String(mm).padStart(2, '0') + ':' + String(ss).padStart(2, '0'),
       timeLabel: ob.type === 'attack' ? '공격 제한' : '버틸 시간',
-      enemy: '적 ' + enemyLeft + '/' + game.enemies.length,
+      enemy: '적 전차 ' + enemyLeft + '/' + tanks.length,
     };
   }
 
