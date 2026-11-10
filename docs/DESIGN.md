@@ -28,7 +28,7 @@
 | **M1** | 지도와 이동 | ✅ 완료 |
 | **M2** | 사격과 피해 | ✅ 완료 |
 | **M3** | 탐지와 식별 | ✅ 완료 |
-| M4 | 무전 지휘 | 예정 |
+| **M4** | 무전 지휘 | ✅ 완료 |
 | M5 | 승무원과 신뢰도 | 예정 |
 | M6 | 1호차 조준 화면 | 예정 |
 | M7 | 캠페인과 재정비 | 예정 |
@@ -62,7 +62,7 @@
   - 관통 확률 = 표[탄종][표적 차종][면] 의 500m 값과 최대 사거리 값을 직선 보간.
   - 관통 시 차종별 확률(K1A2 30%, 천마호 65%)로 격파, 아니면 맞은 면에 따라 부위 1곳(40% 확률로 2곳) 손상. 관통 못 해도 탄종별 확률로 외부 장비 1곳 손상.
   - 근거 없는 숫자는 코드에 모두 "게임용 추정치" 주석.
-- **부위별 손상** (`js/combat/damage.js`): 궤도(이동 불가) / 엔진(속도 ×0.5) / 주포(사격 불가) / 사격통제장치(명중률 ×0.5) / 무전기(지금은 기록만, M4 에서 사용) / 격파.
+- **부위별 손상** (`js/combat/damage.js`): 궤도(이동 불가) / 엔진(속도 ×0.5) / 주포(사격 불가) / 사격통제장치(명중률 ×0.5) / 무전기(M4: 명령 수신 불가·시야 공유 불가) / 격파.
   - 지도 기호 아래 작은 칸 5개(궤도·엔진·주포·사통·무전 순)로 손상 표시. 격파는 붉은 X.
 - **무전 기록**: 사격·명중·손상을 짧은 문장으로 ("2호차 적 전차 3 격파. (철갑탄, 2.1km)"). 적의 빗나간 포격은 전차마다 게임 60초에 한 번만 기록.
 - **승패** (`js/game/battle.js`, `js/ui/result.js`): 적 4대 모두 격파 → 작전 성공, 아군 4대 모두 격파 → 작전 실패. 결과 화면(격파·손실·탄약·명중률·경과 시간, 다시 하기).
@@ -125,10 +125,52 @@
 - 야간은 의도적으로 쉽다(K1A2 열상장비의 우위). 더 어렵게 하려면 `SENSORS.CHONMA.night` 를 올린다.
 - 모의 전투 방법: 아래 '확장 지침'의 방법 + `game.gameSeconds` 는 step 이 진행. 전략 흉내는 매 틱 `u.targetId` 지정이나 `Movement.order` 로.
 
+### M4 무전 지휘 (완료)
+
+- **핵심 변화**: 1호차(소대장차, 지휘 전차)만 직접 조작. 2·3·4호차는 지도 클릭으로 못 움직이고 **무전 명령으로만** 움직인다. 1호차가 격파되면 4호차(부소대장차)가 지휘를 넘겨받는다(`Radio.controlUnit`).
+- **명령 입구** (`js/game/command.js`, `TMM.Command.issue(game, spec, order)`): 화면과 모의 전투가 같은 함수를 쓴다.
+  - 받는 대상 `spec`: `'1'~'4'` 한 대 / `'T1'` 1조(1·2호차) / `'T2'` 2조(3·4호차) / `'ALL'` 소대 전체. 지휘 전차가 포함되면 그 전차는 바로(차내 통화), 나머지는 무전으로.
+  - 명령 (`js/game/orders.js`): 이동 `move{x,y}` · 엄호 `cover{x,y}`(그 지점 쪽을 지켜보며 정지, 차체도 그쪽) · 엄호 이동 `bound{x,y}` · 사격 통제 `roe{roe}` · 목표 지정 `target{targetId|null}` · 철수 `withdraw{x,y}`(처음 400m 후진, 속도 ×0.55) · 정지 `stop` · 상황 보고 `report`.
+  - 여러 대에 같은 위치를 주면 진행 방향 옆으로 150m 씩 벌려 서고(`formationPoint`), 어떤 이동이든 다른 전차가 서 있거나 가는 곳 110m 안이면 빈 자리로 비켜 선다(`freeSpot`). 멈춘 전차끼리 너무 붙으면 번호 큰 쪽이 비켜 선다.
+- **화면** (`js/ui/command-bar.js`, 오른쪽 맨 위 '무전 지휘' 창): 받는 대상 버튼(교신 상태 점: 녹 양호 / 황 잡음 / 적 두절), 명령 버튼, 사격 통제 버튼, 안내문, 송신 대기열. 단축키: 1~4 전차(받는 대상도), 5 1조, 6 2조, 7 소대, M 이동, C 엄호, B 엄호 이동, T 목표 지정, W 철수, S 정지, R 보고, 8/9/0 사격 금지/식별 후/자유, X 목표 해제, Q 1호차 탄종, Esc/오른쪽 클릭 취소.
+  - 위치·표적이 필요한 명령은 버튼(또는 키)을 누른 뒤 지도를 클릭. 지도에 받는 전차들 → 커서 점선 미리보기. 표적 클릭은 언제나 '받는 대상에게 목표 지정'.
+  - 명령을 고르지 않고 지도를 클릭하면 1호차만 이동, 2·3·4호차가 대상이면 "무전으로만 움직입니다" 안내.
+  - 일시정지 중에도 명령을 내릴 수 있다. 무전망은 게임 시간으로만 흐르므로 재개해야 송신이 시작된다(지휘 전차 자신의 명령은 바로 적용).
+  - 지도: 엄호 중인 전차의 감시 부채꼴(±50°), 명령 전달 중 `((·))`, 교신 두절 `무전✕`, 엄호 이동 목표 깃발.
+- **무전망** (`js/radio/radio-net.js`, 수치 `js/radio/radio-config.js` 의 `TMM.RADIO`): DOM 없이 돌아가며 사건 `{type:'radio', from, text, kind}` 로 무전 기록을 만든다.
+  - 한 채널: 한 번에 한 명만 말한다. 말하는 시간 = 2초 + 글자당 0.035초, 다음 교신까지 0.6초. 중요도(명령·격파 3 > 피격 2 > 발견·식별 1 > 근탄·도착 0) 순, 25초 넘게 밀린 일상 보고는 버린다.
+  - 명령 흐름: 소대장 송신 → (도착) → 받는 전차가 1.5~3초 뒤 "강철 2, 수신. ○○." 복창 → 1초 뒤 실행. 같은 종류(행동/사격 통제/목표/보고)의 새 명령은 앞 명령을 대신한다.
+  - **잘못 알아들음** 7%(고정, `MISHEAR_P`): 위치는 250~450m 다른 곳, 엄호 방향 ±45/90°, 사격 통제 옆 단계, 목표는 다른 접촉. 복창이 달라지고 '복창 확인' 경고가 뜬다.
+  - **교신 품질** (`Radio.link`): 2.5km 까지 깨끗, 6km 에서 잡음 50%, 능선 너머(안테나 4m 높이 직선을 지형이 가림) +40%. 잡음이면 "다시 보내라" → 자동 재송신(최대 3번), 보고는 일부 낱말이 '…' 로.
+  - **교신 두절**: 무전기 손상 전차(또는 지휘 전차 무전기 손상)는 명령을 못 받는다(8초 뒤 "응답 없음"), 보고도 못 한다. 250m 안이면 수기·육성으로 전달.
+  - **시야 공유 끊김** (`intel.js`): 무전기 손상 전차가 본 것은 소대 접촉 표에 공유되지 않는다. 그 전차는 직접 본 표적을 식별·사격할 수 있다. 접촉에 `known`(한 번이라도 공유됨)·`privVisible`·`privSeen` 추가, 지도·패널은 `known` 만 그린다. 적도 같은 규칙.
+  - **자동 보고**(1.5~4초 늦게): 적 발견(같은 전차가 1.5초 안에 본 것은 묶어서 "북동쪽 숲 미상 표적 2 (B·C)"), 식별, 피탄·손상, 격파당함(가장 가까운 다른 전차가 보고), 탄약 부족(8발 이하)·소진, 탄종 전환, 적 격파, 목표 지점 도착, 사격 중지. 지휘 전차 자신의 일은 '1호차 (차내)' 로 바로 들린다(한 발 한 발 결과 포함). 2·3·4호차는 격파·미식별 사격만 보고.
+  - **상황 보고**: "탄약 30발 (철갑 18·고폭 12), 손상 없음, 보이는 적 1 (적 전차 3). 북동쪽 엄호."
+- **호출부호(가상)**: 소대 '강철', 호차 '강철 1~4', 조 '강철 1조/2조', 중대 '강철 6'. 실제 군 음어는 쓰지 않는다. 승무원 성격 대사는 아직 없다(M5).
+- **사격 통제** (`gunnery.js`, `unit.roe`): 사격 금지(스스로 안 쏨, 목표 지정한 표적만) / 식별 후 사격(기본, M3 규칙: 식별된 적 2km) / 자유 사격(식별된 적은 사거리 끝까지, 미상 표적도 1.5km 안이면 쏨 → 오인사격 위험).
+- **엄호(감시 방향)** `unit.watch`: 정지 중 차체를 그 방향으로 돌리고(지정 표적을 쏘는 중이면 그쪽 우선), ±50° 안 표적은 탐지 거리 ×1.1, 식별 시간 ×0.7.
+- **엄호 이동** (`Orders.startBound/updateBound`, `game.bound`): 소대 전체 참가. 움직이는 조는 엄호 중인 조보다 350m 앞(최소 200m)까지 나가 1조 왼쪽·2조 오른쪽으로 벌려 선다. 다 도착하면 조장이 "○조 엄호 위치 도착. ○조 전진하라" 를 무전으로 알리고, **그 보고가 전달되면** 다른 조가 움직인다. 두 조가 목표 지점에 닿으면 끝나고 모두 진행 방향 엄호. 받는 대상이 2조(또는 3·4호차)면 2조 먼저, 아니면 1조 먼저. 다른 명령을 받은 전차는 빠진다.
+- **스스로 판단** (`Orders.onEvents`, 2·3·4호차): 멈춘 상태에서 맞았고(격파 아님), 차체 엄폐가 아니면 85% 확률로 100~350m 안의 엄폐물(사수에게 차체 엄폐 > 아예 안 보임 > 숲 사이)로 옮기고 사수 쪽을 지켜본다(90초에 한 번). 그 밖에는 마지막 명령을 계속한다.
+- **패배 조건 변경**: 소대 전차 **3대 이상** 격파되면 소대 전투력 상실 → 작전 실패 (`CONFIG.PLATOON_LOSS_FAIL`).
+
+### M4 균형 메모 (모의 전투, 주간 30회·야간 24회)
+
+| 조건 | 주간 승률 | 주간 손실 | 야간 승률 | 야간 손실 |
+|---|---|---|---|---|
+| 가만히 (명령 없음, 스스로 판단만) | **30%** | 2.6대 | 54% | 2.2대 |
+| 처음에 1조 남서·2조 남동 엄호만 | 83% | 0.9대 | 88% | 0.7대 |
+| 보이는 적을 무전으로 목표 지정만 | 97% | 0.8대 | 100% | 1.0대 |
+| 엄호 방향 + 목표 지정 | **100%** | 0.2대 | 100% | 0.3대 |
+
+- M3 수치로는 무전 지휘가 들어가자 가만히 있어도 95% 이겼다. 그래서 적을 강하게 했다(게임용 추정치): 115mm 명중 곡선 상향(1km 78%, 1.5km 65%, 2km 38%), K1A2 측면 관통 0.9/0.75·후면 0.95/0.9, K1A2 관통 시 격파 0.6, 천마호 장전 8초·조준 5초, 적은 부위 3곳 손상까지 버티고 마지막 한 대까지 싸움(`EnemyAI.P`), 천마호 야간 탐지 2.3km·식별 8초·명중 ×0.85.
+- 정면 복합장갑(115mm 관통 0.12/0.05)은 그대로라, 엄호 방향을 적 쪽으로 돌려 두기만 해도 손실이 크게 준다. 가만히 있으면 자동 교전이 포탑만 돌리므로 양옆에서 측면을 맞는다.
+- 모의 전투 전략은 모두 `TMM.Command.issue` 를 써서 무전 지연·잡음·오청을 똑같이 겪는다. 균형을 볼 때 `game.radio`, `TMM.RADIO`, `TMM.EnemyAI.P` 를 바꿔 보면 된다.
+
 ## 4. 핵심 규칙과 수치
 
 - 지도: 160 × 120 칸, **1칸 = 50m** → 8km × 6km. 좌표 단위는 "칸"(실수). x = 서→동, y = 북→남.
 - 격자 좌표: 6자리 `EEE-NNN` (100m 단위, 남서쪽 모서리 기준, 북쪽으로 갈수록 N 증가). 1km 격자선 표시.
+- 무전: 모든 지연은 게임 초 (교전 중 실제 1초 = 게임 3초라 명령 한 번에 실제 2~4초 정도). 수치는 `js/radio/radio-config.js` 한곳.
 - 시간: 실제 1초 = 게임 10초 (`CONFIG.TIME_SCALE`), 교전 중에는 3초 (`CONFIG.COMBAT_TIME_SCALE`), 배속 곱함. 작전(72시간)은 D+0 05:00 기준, 이번 전투는 주간 09:00 / 야간 22:00 에 시작.
 - 거리 계산: 칸 거리 × 50m. 사거리 K276 3.0km, K277 2.5km, 천마호 115mm 3.0km(2km 밖은 명중 거의 기대 못 함). 자유 사격은 양쪽 모두 2km 안.
 - 시야: 고도 = 40 + sightElev × 330 (m). 시야 계산 간격 게임 0.5초.
@@ -143,6 +185,7 @@ index.html               화면 뼈대, 스크립트 로드 순서
 css/style.css            전체 디자인 (색은 :root 변수)
 js/core/config.js        전역 설정값 (TMM.CONFIG)
 js/core/noise.js         결정적 난수·노이즈
+js/radio/radio-config.js 무전 수치 한곳 (TMM.RADIO): 지연·오청·잡음·두절·보고·엄호 이동·사격 통제, 호출부호, M5 연결점 crewFactor ← 무전 균형은 여기
 js/map/terrain-types.js  지형 종류·속도·색 (TMM.T, TMM.TERRAIN_INFO)
 js/map/geography.js      가상 지형 정의: 하천선, 저수지, 도로, 시가지, 주둔지, 고도, 지명 (TMM.Geo)
 js/map/mapgen.js         칸 격자 생성, 지도 조회 함수 (TMM.MapGen → map 객체)
@@ -154,26 +197,31 @@ js/combat/weapons.js     탄종·차종·관통 수치표, 손상 부위 정의 
 js/combat/sensors.js     관측 장비·표적 신호·시야 상수·낮밤 (TMM.SENSORS, TMM.SIGNATURE, TMM.VISION, TMM.LIGHT) ← 탐지·식별 균형은 여기
 js/combat/ballistics.js  명중(시야 배수 포함)·관통·손상 판정, 트럭·보병 피해 (TMM.Ballistics)
 js/combat/damage.js      전투 필드 초기화, 손상 적용, 상태 문구 (TMM.Damage)
-js/combat/gunnery.js     표적 선택·조준·장전·사격 (TMM.Gunnery)
+js/combat/gunnery.js     표적 선택(사격 통제 단계 반영)·조준·장전·사격 (TMM.Gunnery)
 js/units/enemy.js        적 천마호 소대 편성·경로(경유지·집결지·사격 진지)·후퇴 집결지·퇴각 출구 (TMM.Enemy)
 js/units/allies.js       비지휘 아군(보병 분대·보급 트럭·K2) 편성과 정해진 움직임 (TMM.Allies)
 js/game/intel.js         탐지·식별·접촉 표·시야 공유·차체 엄폐 상태 (TMM.Intel)
-js/ai/enemy-ai.js        적 AI: 숨은 경로 전진·집결·협공·정지 사격·후퇴·소대 퇴각 (TMM.EnemyAI)
-js/game/battle.js        게임 상태 생성, 전투 한 틱(시계→이동→아군→시야→AI→사격→승패), 교전 중 판정 (TMM.Battle)
+js/game/orders.js        명령 실행(이동·엄호·엄호 이동·철수·정지·사격 통제·목표), 대형·비켜 서기, 피격 시 스스로 엄폐, 명령 문구 (TMM.Orders)
+js/radio/radio-net.js    소대 무전망: 한 채널 송신 대기열, 명령 전달·복창·오청·잡음·두절, 자동 보고, 상황 보고 (TMM.Radio)
+js/game/command.js       지휘 명령의 입구: 받는 대상 → 지휘 전차는 바로, 나머지는 무전 (TMM.Command)
+js/ai/enemy-ai.js        적 AI: 숨은 경로 전진·집결·협공·정지 사격·후퇴·소대 퇴각 (TMM.EnemyAI, 행동 기준 TMM.EnemyAI.P)
+js/game/battle.js        게임 상태 생성, 전투 한 틱(시계→무전망→이동→아군→시야→명령 수행→AI→사격→스스로 판단→자동 보고→승패), 교전 중 판정 (TMM.Battle)
 js/game/clock.js         작전 시계 표시 형식 (TMM.Clock)
 js/game/input.js         마우스·키보드 입력 (TMM.Input)
 js/ui/panel.js           오른쪽 패널(엄폐·접촉 현황 포함)·상단 시계·커서 안내 (TMM.Panel)
 js/ui/radio-log.js       무전 기록 창 (TMM.RadioLog)
 js/ui/result.js          승패 결과 화면 (TMM.Result)
+js/ui/command-bar.js     무전 지휘 창: 받는 대상·명령·사격 통제 버튼, 안내, 송신 대기열 (TMM.CommandBar)
 js/render/terrain-layer.js  지형 바탕을 한 번 그려두는 오프스크린 캔버스
-js/render/renderer.js    매 프레임 그리기(야간 어둠·시야 표시·전차·접촉 기호·사격선·사거리 원·예광탄), 좌표 변환, 클릭 판정
-js/main.js               시작 화면, 행동(actions) 정의, 전투 사건→무전 문장·화면 경고, 주 루프
+js/render/renderer.js    매 프레임 그리기(야간 어둠·시야 표시·전차·접촉 기호·사격선·사거리 원·예광탄·감시 부채꼴·무전 표시·명령 미리보기), 좌표 변환, 클릭 판정
+js/main.js               시작 화면, 행동(actions: 받는 대상·명령 고르기·지도/표적 클릭), 무전망 밖 알림(오인사격·중대 무전)·화면 효과, 주 루프
 docs/DESIGN.md           이 문서
 ```
 
 ### 주요 데이터
 
-- `TMM.game` (`Battle.create` + main.js): `{ map, units, enemies, allies, light, startSeconds, gameSeconds, vis, intel, enemyGo, enemyBroken, ffCount, lastShotAt, combat, over, rand, selectedId, paused, started, speedMult, hover, hoverContactId, showSight, fx }`
+- `TMM.game` (`Battle.create` + main.js): `{ map, units, enemies, allies, light, startSeconds, gameSeconds, vis, intel, enemyGo, enemyBroken, ffCount, lastShotAt, combat, over, rand, selectedId, paused, started, speedMult, hover, hoverContactId, showSight, fx, radio, bound, cmd }`
+  - M4 `radio`: `{ queue[], timers[], busyUntil, pending: Map('전차id:종류' → {unitId, order, state}), batch, control }`. `state`: queued·tx·garble·noack·ack·exec. `bound`: 진행 중인 엄호 이동. `cmd`: `{ to, mode }` 화면의 받는 대상과 지도 클릭을 기다리는 명령.
   - `over`: 승패가 나면 `{ win, at }`. `fx`: 화면 효과(실제 시간 기준으로 사라짐).
   - `vis`: 이번 시야 계산에서 보이는 쌍 `Map(관측자 id → Map(표적 id → { d, obs, hullDown, idTime }))`.
   - `intel.friend/enemy.contacts`: `Map(표적 id → { label, unit, visible, seenBy, lastX, lastY, lastSeen, idProg, identified, kind('hostile'|'friendly'), cls, wreck, dist, obs })`.
@@ -182,31 +230,37 @@ docs/DESIGN.md           이 문서
   - M3 필드: `hurt`(트럭·보병 피해), `exited`(지도 밖으로 나감), `lastFiredAt`(포구 섬광), `abandoned`(적, 유기), 아군 소대 `cover`/`hullDown`(차체 엄폐 상태).
   - 적만: `num`(1~4), `ai{mode, route[], wp, stage, staged, atPos, lane, deployed, repath, lastThreatAt}`
   - 비지휘 아군: `ally: true`, `script{type:'outpost'|'drive', at, to, exit, done}`, `fixedSpeedKmh`(보병 도보)
+  - M4 필드 (아군 소대, `Orders.init`·`Radio.init`): `order{type,…}`(마지막 명령), `watch`(감시 방향 라디안|null), `roe`('hold'|'id'|'free'), `reverseM`(남은 후진 m), `selfCoverAt`, `selfMove`, `ammoWarned`, `lastMissLog`.
   - 이후 단계에서 필드를 추가: M5 `crew` 등.
-- 전투 사건(battle.js 가 돌려줌): `arrive`, `shot{shooter,target,ammoId,res,fresh,unidentified,friendlyFire}`, `ammo-switch`, `contact-new{side,contact,unit,by}`, `contact-id{side,contact,unit,how('sight'|'iff')}`, `cease-fire`, `enemy-engage`, `enemy-retreat`, `enemy-go`, `enemy-break`, `enemy-abandon`, `enemy-exit`, `ally-move`, `ally-exit`, `over`. main.js 의 `report()` 가 무전 문장·효과로 바꾼다.
+- 전투 사건(battle.js 가 돌려줌): `radio{from,text,kind}`(M4, 무전 기록 한 줄), `arrive`, `shot{shooter,target,ammoId,res,fresh,unidentified,friendlyFire}`, `ammo-switch`, `contact-new{side,contact,unit,by}`, `contact-id{side,contact,unit,how('sight'|'iff')}`, `cease-fire`, `enemy-engage`, `enemy-retreat`, `enemy-go`, `enemy-break`, `enemy-abandon`, `enemy-exit`, `ally-move`, `ally-exit`, `over`. main.js 의 `report()` 가 무전 문장·효과로 바꾼다.
 - 지도(map): `{ cols, rows, metersPerCell, type[], elev[], sightElev[], speedMs[], typeAt(), infoAt(), speedMsAt(), altitudeAt(), gridRef() }`
 
 ### 확장 지침
 
 - 새 기능은 새 파일로 만들고 `index.html` 의 스크립트 목록에 **의존 순서대로** 추가한다.
-- 플레이어 행동은 `main.js` 의 `actions` 를 거치게 해, 무전 기록·향후 무전 지휘(M4)와 연결되게 한다.
+- 플레이어 지휘 명령은 `TMM.Command.issue` 를 거치게 한다 (지휘 전차는 바로, 나머지는 무전). 새 명령 종류는 `orders.js` 의 `execute/check/phrase/readback/describe` 와 `radio-net.js` 의 `mishear` 에 추가.
 - 지형 수치는 `terrain-types.js`, 지형 모양은 `geography.js` 만 고치면 된다.
 - 전투 수치(명중·관통·장전·탄약)는 `weapons.js`, 탐지·식별은 `sensors.js`, 지형의 가림은 `terrain-types.js` 의 `TERRAIN_SIGHT`, 적 행동 기준(교전 거리·집결·후퇴·퇴각 조건)은 `enemy-ai.js` 위쪽 상수, 적 경로는 `enemy.js` 만 고치면 된다.
 - 전투 규칙은 DOM 없이 돌아가므로(`battle.js` 이하) Node 로 모의 전투를 수백 번 돌려 균형을 볼 수 있다: index.html 의 스크립트 중 render·input·ui·main 을 뺀 나머지를 `vm` 으로 읽고 `game = TMM.Battle.create({ light, rand })`, `TMM.Battle.step(game, 0.5)` 반복. 한 판에 약 2초.
 
-## 6. 다음 단계 메모 (M4 무전 지휘 준비)
+## 6. 다음 단계 메모 (M5 승무원과 신뢰도 준비)
 
-M3 에서 M4 를 위해 남겨 둔 연결점과 할 일:
+M4 에서 M5 를 위해 남겨 둔 연결점과 할 일:
 
-- **무전기 손상**: 지금은 기록만. 연결점 두 곳.
-  1. 명령 수신: `main.js` 의 `actions.*` 가 모든 명령의 입구. 무전기 손상 전차는 여기서 지연(큐에 넣고 게임 N초 뒤 실행)·실패(확률)·"응답 없음" 처리.
-  2. **시야 공유**: `Intel.updateSide` 에서 관측자가 본 것을 편 전체 접촉 표에 바로 넣는다. 무전기(=전장관리체계 연결)가 손상된 전차의 관측은 공유하지 말고, 그 전차 자신만 쏠 수 있게(`game.vis` 는 이미 전차별) 바꾸면 된다. 접촉에 `seenBy` 가 있으므로 '공유 가능한 관측자'만 걸러 visible 을 정하면 됨.
-- **보고 체계**: 지금 탐지·식별 보고(`contact-new`, `contact-id`)는 바로 무전 기록에 찍힌다. M4 에서는 "적 전차 2대, 격자 ○○○, 북동, 거리 1.8km" 같은 표준 보고 양식과, 보고가 무전망을 타는 지연을 넣을 수 있다.
-- **지휘 명령 후보** (M3 에서 필요성이 확인된 것):
-  - 사격 통제: '사격 금지 / 식별 후 사격 / 자유 사격' 3단계. 지금은 자유 사격(식별된 적만, 2km)과 지정 사격 두 가지. 오인사격 위험 때문에 '사격 금지'가 특히 유용.
-  - 차체 방향 지시: 지금은 지정 표적에만 차체를 돌린다. '정면 ○○ 방향 유지' 명령이 있으면 측면 노출을 막을 수 있다 (M3 균형에서 가만히 있으면 손실이 큰 주된 이유).
-  - 조 단위 명령(1조·2조 동시 이동·엄호), 사격 진지 점령(차체 엄폐 지점 찾아가기 — `TMM.Sight.hullDownFromNorth` 를 임의 방향으로 일반화하면 됨).
-  - 비지휘 아군과의 교신: 보병 분대·트럭에게 위치 보고를 요청하면 접촉이 바로 '아군'으로 식별되게 할 수 있다 (`Intel.reveal(game, 'friend', unit, events, 'radio')`).
-- **적 AI**: 경로는 고정 2갈래. M8 에서 경로 여러 벌 중 무작위 선택, 정찰 선두, 포병 연막 등을 넣으면 반복 플레이가 덜 단조로움.
-- **시야 표시 성능**: 시야 표시(V)는 전차가 반 칸 움직일 때마다 80×60 격자를 다시 계산(약 5천 시선). 지도를 키우거나 확대 기능을 넣으면 간격(step)을 조정할 것.
-- 지도 확대/이동(휠·드래그)이 필요해질 수 있음 → `renderer.js` 의 view 에 추가.
+- **승무원 연결점 한 곳**: `TMM.RADIO.crewFactor(unit, what)` (`js/radio/radio-config.js`). 지금은 항상 1. M5 에서 `unit.crew`(전차장·포수·조종수·탄약수의 숙련도·성격·신뢰도·피로)를 보고 배수를 돌려주면 된다.
+  - `'mishear'` 오청 확률 배수 (`MISHEAR_P` 7% × 배수) — 무전수(전차장) 숙련도·피로·스트레스
+  - `'ack'` 수신 응답 지연 배수, `'report'` 자동 보고 지연 배수 — 숙련도·성격(꼼꼼함/느긋함)
+  - `'initiative'` 피격 시 스스로 엄폐물로 옮길 확률 배수 (기본 85%) — 성격(적극/소극), 소대장에 대한 신뢰도
+- **신뢰도가 바꿀 수 있는 것** (아직 없음, 제안):
+  - 신뢰가 낮으면 위험한 명령(노출된 곳으로 이동, 자유 사격)에 "재확인 바람" 으로 머뭇거리거나 늦게 따름 → `radio-net.js` 의 `delivered()` 에서 복창 전에 판단.
+  - 오인사격·아군 손실·무의미한 명령 번복이 신뢰도를 깎고, 격파·생존이 올림. 사건은 이미 `shot{friendlyFire}`, 손실 보고, `pending` 대체(같은 종류 새 명령)로 잡을 수 있다.
+  - 명령이 없을 때의 '스스로 판단'(`Orders.onEvents/update`)을 성격별로 넓힐 수 있다: 적극적인 전차장은 보이는 적에게 차체를 돌리거나 더 좋은 사격 진지로 옮김, 소극적이면 후진.
+- **승무원 대사**: 지금 보고 문장은 모두 `radio-net.js` 의 `report()` 호출 한 줄씩이다(본문 `body`). M5 에서 `body` 를 성격별 말투 표(예: `TMM.CREW_VOICE[성격][사건]`)로 바꾸면 된다. 호출부호 머리말("강철 1, 여기 강철 3.")과 "이상." 은 `report()` 가 붙인다.
+- **손상과 승무원**: 관통 시 '격파가 아니면 부위 손상' 대신 승무원 부상(포수 부상 → 조준 시간 증가 등)을 넣을 자리: `ballistics.js` 의 손상 판정과 `damage.js` 의 `apply`.
+- **1호차 격파 시**: 지금은 4호차가 지휘를 넘겨받고 플레이어가 계속 지휘한다(`Radio.controlUnit`). M5/M7 에서 '소대장 전사 → 부소대장 지휘로 캠페인 계속' 같은 처리를 할 수 있다.
+- **그 밖의 남은 과제**:
+  - 비지휘 아군(보병·트럭)과의 교신: 위치 보고를 요청하면 즉시 '아군' 식별 (`Intel.reveal(game, 'friend', unit, events, 'radio')`) — 무전 창에 받는 대상 '중대/인접 부대'를 넣으면 된다.
+  - 사격 진지 점령 명령(차체 엄폐 지점 자동 탐색): `Orders.findCover` 를 '지정 방향에서 차체 엄폐' 로 일반화하면 된다.
+  - 무전망이 붐빌 때 교신 우선권(긴급 "중지! 중지!")·간결 보고 설정.
+  - 적 AI 경로는 아직 고정 2갈래 (M8 에서 다양화).
+  - 시야 표시 성능, 지도 확대/이동은 M3 메모 그대로.

@@ -45,7 +45,7 @@ TMM.AMMO = {
     use: '전차용',
     caliber: '115mm',
     rangeM: 3000, // 게임용 추정치: 구형 사격통제장치라 2km 밖은 명중을 기대하기 어렵지만, 보이면 사격은 한다
-    hit: [[0, 0.85], [500, 0.77], [1000, 0.62], [1500, 0.45], [2000, 0.24], [2500, 0.1], [3000, 0.05]],
+    hit: [[0, 0.9], [500, 0.86], [1000, 0.78], [1500, 0.65], [2000, 0.38], [2500, 0.15], [3000, 0.06]], // M4 에서 올림 (무전 지휘가 생겨 플레이어가 강해짐)
     externalDamage: 0.25,
     killMul: 1.0,
   },
@@ -69,7 +69,7 @@ TMM.PENETRATION = {
     K2: { front: [0.03, 0.03], side: [0.4, 0.4], rear: [0.75, 0.75] },
   },
   E115: {
-    K1A2: { front: [0.12, 0.05], side: [0.7, 0.55], rear: [0.9, 0.8] },
+    K1A2: { front: [0.12, 0.05], side: [0.9, 0.75], rear: [0.95, 0.9] }, // M4: 측면·후면을 더 아프게 (엄호 방향 지휘의 가치)
     K2: { front: [0.06, 0.02], side: [0.5, 0.35], rear: [0.8, 0.65] },
     CHONMA: { front: [0.6, 0.4], side: [0.9, 0.8], rear: [0.95, 0.9] },
   },
@@ -97,7 +97,7 @@ TMM.VEHICLES = {
     moveFireMul: 0.8, // 기동 간 사격 시 명중 배수 (2축 안정화)
     targetMoveMul: 0.7, // 움직이는 표적 명중 배수 (사격통제장치가 리드 계산해도 원거리에선 오차)
     canFireOnMove: true,
-    killOnPen: 0.5, // 관통 시 격파 확률 (탄약 분리 보관) — 게임용 추정치 (M3 에서 0.3 → 0.5)
+    killOnPen: 0.6, // 관통 시 격파 확률 (탄약 분리 보관) — 게임용 추정치 (M3 0.3 → 0.5, M4 0.6)
     turnDegPerSec: 25, // 정지 중 차체를 표적 쪽으로 돌리는 속도
   },
   CHONMA: {
@@ -109,8 +109,8 @@ TMM.VEHICLES = {
     gun: '115mm 활강포',
     ammoLoad: { E115: 40 }, // T-62 계열 적재량 기준 (게임용 추정치)
     ammoTypes: ['E115'],
-    reloadSec: 10, // 게임용 추정치: 좁은 포탑, 수동 장전 (M3 에서 12 → 10)
-    aimSec: 6,
+    reloadSec: 8, // 게임용 추정치: 좁은 포탑, 수동 장전 (M3 12 → 10, M4 8)
+    aimSec: 5, // M4 6 → 5
     moveFireMul: 0.35,
     targetMoveMul: 0.6,
     canFireOnMove: false,
@@ -165,7 +165,7 @@ TMM.PARTS = {
   engine: { name: '엔진', effect: '속도 저하' },
   gun: { name: '주포', effect: '사격 불가' },
   fcs: { name: '사격통제장치', effect: '명중률 저하' },
-  radio: { name: '무전기', effect: '교신 장애 (M4 에서 적용)' },
+  radio: { name: '무전기', effect: '명령을 못 받고, 본 것을 소대에 공유하지 못함' },
 };
 TMM.PART_KEYS = ['track', 'engine', 'gun', 'fcs', 'radio'];
 

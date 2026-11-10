@@ -1,6 +1,7 @@
 /*
  * 전차 이동: 이동 명령 처리와 매 프레임 위치 갱신.
  * 속도는 전차가 지금 서 있는 칸의 지형으로 정해진다. 엔진이 손상되면 그 속도에 배수를 곱한다.
+ * M4: unit.reverseM 이 남아 있으면 정면을 뒤로 둔 채 후진한다 (철수 명령). 후진은 느리다.
  */
 TMM.Movement = (function () {
   const mul = (unit) => (TMM.Damage ? TMM.Damage.speedMul(unit) : 1);
@@ -30,6 +31,7 @@ TMM.Movement = (function () {
     unit.dest = null;
     unit.state = 'idle';
     unit.speedKmh = 0;
+    unit.reverseM = 0;
   }
 
   /**
@@ -52,10 +54,15 @@ TMM.Movement = (function () {
       // 통행 불가 칸 모서리를 스칠 때도 멈추지 않도록 최소 속도 보정
       // 보병처럼 지형과 상관없이 같은 속도로 걷는 부대는 fixedSpeedKmh (M3)
       const ms = unit.fixedSpeedKmh ? unit.fixedSpeedKmh / 3.6 : (map.speedMsAt(unit.x, unit.y) || map.maxSpeedMs * 0.15) * mul(unit);
-      unit.speedKmh = ms * 3.6;
-      unit.heading = Math.atan2(dy, dx);
-      const cellsPerSec = ms / map.metersPerCell;
-      const step = cellsPerSec * remaining;
+      let v = ms;
+      if (unit.reverseM > 0) {
+        v *= TMM.RADIO.REVERSE_SPEED_MUL;
+        unit.heading = Math.atan2(-dy, -dx);
+      } else unit.heading = Math.atan2(dy, dx);
+      unit.speedKmh = v * 3.6;
+      const cellsPerSec = v / map.metersPerCell;
+      const step = Math.min(cellsPerSec * remaining, dist);
+      if (unit.reverseM > 0) unit.reverseM = Math.max(0, unit.reverseM - step * map.metersPerCell);
       if (step >= dist) {
         unit.x = tgt.x;
         unit.y = tgt.y;

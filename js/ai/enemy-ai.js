@@ -20,12 +20,16 @@ TMM.EnemyAI = (function () {
   const D = () => TMM.Damage;
 
   // ---- 적 행동 기준 (게임용 추정치) ----
-  const ENGAGE_M = 2000; // 사격 진지에 도착한 뒤: 이 거리 안에 아군이 보이면 정지해 사격
-  const APPROACH_ENGAGE_M = 1200; // 집결 전(숨어서 이동 중): 아주 가까울 때만 멈춰 싸운다
-  const ASSAULT_ENGAGE_M = 900; // 집결 후 사격 진지로 나가는 중: 진지에 닿을 때까지 웬만하면 멈추지 않는다
-  const STAGE_MAX_SEC = 360; // 첫 전차가 집결지에 닿은 뒤 이 시간이 지나면 다 안 모여도 출발
-  const LOST_SEC = 40; // 교전 중 아군이 이 시간 동안 안 보이면 다시 전진
-  const BREAK_EFFECTIVE = 1; // 싸울 수 있는 전차가 이 수 이하가 되면 소대 퇴각
+  // (모의 전투에서 바꿔 볼 수 있도록 TMM.EnemyAI.P 로도 내보낸다)
+  const P = {
+    ENGAGE_M: 2000, // 사격 진지에 도착한 뒤: 이 거리 안에 아군이 보이면 정지해 사격
+    APPROACH_ENGAGE_M: 1200, // 집결 전(숨어서 이동 중): 아주 가까울 때만 멈춰 싸운다
+    ASSAULT_ENGAGE_M: 900, // 집결 후 사격 진지로 나가는 중: 진지에 닿을 때까지 웬만하면 멈추지 않는다
+    STAGE_MAX_SEC: 360, // 첫 전차가 집결지에 닿은 뒤 이 시간이 지나면 다 안 모여도 출발
+    LOST_SEC: 40, // 교전 중 아군이 이 시간 동안 안 보이면 다시 전진
+    BREAK_EFFECTIVE: 0, // 싸울 수 있는 전차가 이 수 이하가 되면 소대 퇴각 (M4: 1 → 0, 마지막 한 대까지 싸운다)
+    RETREAT_PARTS: 3, // 부위가 이만큼 손상되면 후퇴 (M4: 2 → 3)
+  };
 
   // 적이 보고 있는 위협: 아군 전차, 또는 아직 식별 못 한 미상 표적(멈춰서 식별한다).
   // 트럭·보병으로 식별된 것은 위협으로 보지 않고 전진을 계속한다. (보병은 작아서 처음부터 무시)
@@ -45,7 +49,7 @@ TMM.EnemyAI = (function () {
   function shouldRetreat(game, e) {
     const parts = D().damagedParts(e).length;
     const lost = game.enemies.filter((x) => x.destroyed).length;
-    return e.damage.gun || D().totalAmmo(e) <= 0 || parts >= 2 || (lost >= 2 && parts >= 1);
+    return e.damage.gun || D().totalAmmo(e) <= 0 || parts >= P.RETREAT_PARTS || (lost >= 2 && parts >= 1);
   }
 
   // 싸울 수 있는 전차: 살아 있고, 주포·탄약이 있고, 움직일 수 있고, 손상 부위 1곳 이하
@@ -72,7 +76,7 @@ TMM.EnemyAI = (function () {
     if (game.enemyBroken) return;
     const alive = game.enemies.filter((e) => !e.destroyed && !e.exited);
     if (!alive.length) return;
-    if (game.enemies.filter(effective).length > BREAK_EFFECTIVE) return;
+    if (game.enemies.filter(effective).length > P.BREAK_EFFECTIVE) return;
     game.enemyBroken = true;
     events.push({ type: 'enemy-break' });
     for (const e of alive) {
@@ -95,7 +99,7 @@ TMM.EnemyAI = (function () {
     if (game.enemyGo) return;
     const active = game.enemies.filter((e) => !e.destroyed && !e.exited && e.ai.mode !== 'retreat' && e.ai.mode !== 'hold');
     const allStaged = active.length && active.every((e) => e.ai.staged || e.ai.wp > e.ai.stage);
-    const timeout = game.enemyStagedAt != null && game.gameSeconds - game.enemyStagedAt > STAGE_MAX_SEC;
+    const timeout = game.enemyStagedAt != null && game.gameSeconds - game.enemyStagedAt > P.STAGE_MAX_SEC;
     if (allStaged || timeout) {
       game.enemyGo = true;
       events.push({ type: 'enemy-go' });
@@ -151,7 +155,7 @@ TMM.EnemyAI = (function () {
       const th = threats(game, e);
       const atPos = ai.wp >= ai.route.length - 2 && Math.hypot(e.x - ai.route[ai.route.length - 2].x, e.y - ai.route[ai.route.length - 2].y) < 2.5;
       if (atPos) ai.atPos = true;
-      const radius = ai.atPos ? ENGAGE_M : game.enemyGo ? ASSAULT_ENGAGE_M : APPROACH_ENGAGE_M;
+      const radius = ai.atPos ? P.ENGAGE_M : game.enemyGo ? P.ASSAULT_ENGAGE_M : P.APPROACH_ENGAGE_M;
       // 멈춰 싸우는 것은 '자기 눈으로' 보이는 위협이 있을 때만 (소대가 공유한 접촉만으로는 멈추지 않고 다가간다)
       const close = th.some((t) => t.d <= radius && TMM.Intel.sees(game, e, t.c.unit));
       if (close) ai.lastThreatAt = now;
@@ -168,7 +172,7 @@ TMM.EnemyAI = (function () {
       }
 
       if (ai.mode === 'engage') {
-        if (now - ai.lastThreatAt < LOST_SEC) continue; // 방금까지 보이던 아군을 기다린다
+        if (now - ai.lastThreatAt < P.LOST_SEC) continue; // 방금까지 보이던 아군을 기다린다
         ai.mode = 'advance';
       }
 
@@ -198,5 +202,5 @@ TMM.EnemyAI = (function () {
 
   const MODE_NAMES = { advance: '전진 중', deploy: '전개 중', engage: '정지 사격', retreat: '후퇴 중', withdraw: '퇴각 중', hold: '기동 불능' };
 
-  return { update, MODE_NAMES, ENGAGE_M };
+  return { update, MODE_NAMES, ENGAGE_M: P.ENGAGE_M, P };
 })();

@@ -37,4 +37,8 @@ TMM.CONFIG = {
   COMBAT_LINGER_SEC: 30,
   // 사격 궤적·피탄 표시가 화면에 남는 시간(실제 초)
   FX_SECONDS: 0.9,
+
+  // ---- M4 ----
+  // 소대 전차가 이만큼 격파되면 소대 전투력 상실 → 작전 실패 (4대 중 3대)
+  PLATOON_LOSS_FAIL: 3,
 };

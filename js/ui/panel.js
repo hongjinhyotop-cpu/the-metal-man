@@ -53,11 +53,12 @@ TMM.Panel = (function () {
         '<span class="r-name">' + esc(u.callsign) + '</span>' +
         '<span class="r-role">' + esc(u.role) + '</span>' +
         '<span class="r-cond"></span>' +
-        '<span class="r-state"></span>';
+        '<span class="r-state"></span>' +
+        '<span class="r-cmd"></span>';
       btn.addEventListener('click', () => onSelect(u.id));
       li.appendChild(btn);
       els.roster.appendChild(li);
-      els.rows[u.id] = { btn, state: btn.querySelector('.r-state'), cond: btn.querySelector('.r-cond') };
+      els.rows[u.id] = { btn, state: btn.querySelector('.r-state'), cond: btn.querySelector('.r-cond'), cmd: btn.querySelector('.r-cmd') };
     }
 
     els.esum = document.getElementById('contact-summary');
@@ -86,6 +87,13 @@ TMM.Panel = (function () {
     const rows = [];
     const row = (k, v, cls) => rows.push('<dt>' + k + '</dt><dd' + (cls ? ' class="' + cls + '"' : '') + '>' + v + '</dd>');
 
+    const ctrl = TMM.Radio.controlUnit(game);
+    const ls = TMM.Radio.linkState(game, u);
+    const pend = TMM.Radio.pendingFor(game, u.id).length;
+    row('명령', esc(TMM.Orders.describe(game, u)) + (pend ? ' <span class="warn">· 새 명령 전달 중</span>' : ''));
+    row('사격 통제', esc(TMM.RADIO.ROE[u.roe].name) + ' <span class="sub">· ' + esc(TMM.RADIO.ROE[u.roe].desc) + '</span>');
+    row('교신', '<span class="' + (ls.code === 'good' || ls.code === 'self' ? 'ok' : ls.code === 'noisy' || ls.code === 'hand' ? 'sub' : 'warn') + '">' + esc(ls.text) + '</span>' +
+      (u === ctrl ? ' <span class="sub">· 직접 조작</span>' : ' <span class="sub">· 무전으로만 지휘</span>'));
     row('상태', esc(stateText(game, u)), u.state === 'moving' ? 'st-move' : 'st-idle');
     row('위치 지형', esc(info.name) + ' <span class="sub">· ' + esc(TMM.speedGrade(info.speed)) + '</span>');
     row('격자 좌표', '<span class="mono">' + map.gridRef(u.x, u.y) + '</span>');
@@ -109,7 +117,7 @@ TMM.Panel = (function () {
     return (
       '<div class="unit-head team-' + u.team + '">' +
       '<span class="u-num">' + u.id + '</span>' +
-      '<div><div class="u-call">' + esc(u.callsign) + '</div>' +
+      '<div><div class="u-call">' + esc(u.callsign) + ' <span class="u-radio">' + esc(TMM.RADIO.call(u)) + '</span></div>' +
       '<div class="u-sub">' + esc(u.model) + ' · ' + esc(u.role) + ' · ' + esc(team.name) + '</div></div>' +
       '</div>' + combat + '<dl class="kv">' + rows.join('') + '</dl>'
     );
@@ -174,7 +182,8 @@ TMM.Panel = (function () {
     } else if (engaged) {
       tgt = esc(I.displayName(engaged)) + ' <span class="sub">· 자동 교전 · ' + (distTo(engaged) / 1000).toFixed(1) + 'km</span>';
     } else {
-      tgt = '<span class="sub">없음 · 식별된 적과 자유 사격 (2km 안)</span>';
+      const ROE_IDLE = { hold: '사격 금지 — 목표 지정한 표적만 쏨', id: '식별된 적과 2km 안 자동 교전', free: '자유 사격 — 사거리 끝까지, 미상 표적도 1.5km 안' };
+      tgt = '<span class="sub">없음 · ' + ROE_IDLE[u.roe || 'id'] + '</span>';
     }
     out.push('<div class="cb-row"><span class="cb-k">사격 목표</span><span>' + tgt + '</span></div>');
     if (engaged && !u.destroyed) {
@@ -221,7 +230,7 @@ TMM.Panel = (function () {
 
   // 접촉 현황 (전장관리체계): 소대가 알고 있는 표적 목록
   function updateContacts(game) {
-    const list = Array.from(game.intel.friend.contacts.values());
+    const list = Array.from(game.intel.friend.contacts.values()).filter((c) => c.known);
     const rank = (c) => (c.wreck ? 4 : c.kind === 'friendly' ? 3 : !c.identified ? 0 : c.visible ? 1 : 2);
     list.sort((a, b) => rank(a) - rank(b) || a.firstSeen - b.firstSeen);
     let html = '';
@@ -239,7 +248,7 @@ TMM.Panel = (function () {
     const kills = game.enemies.filter((e) => e.destroyed && !e.abandoned).length;
     const aband = game.enemies.filter((e) => e.abandoned).length;
     const gone = game.enemies.filter((e) => e.exited).length;
-    const seen = game.enemies.filter((e) => { const c = TMM.Intel.contact(game, 'friend', e.id); return c && c.identified; }).length;
+    const seen = game.enemies.filter((e) => { const c = TMM.Intel.contact(game, 'friend', e.id); return c && c.known && c.identified; }).length;
     let sum = '적 전차 식별 ' + seen + ' / ' + game.enemies.length + ' · 격파 ' + kills;
     if (aband) sum += ' · 유기 ' + aband;
     if (gone) sum += ' · 이탈 ' + gone;
@@ -258,6 +267,10 @@ TMM.Panel = (function () {
     for (const u of game.units) {
       const r = els.rows[u.id];
       set(r.state, 'rs' + u.id, stateText(game, u) + ' · ' + game.map.infoAt(u.x, u.y).name + ' · 잔탄 ' + TMM.Damage.totalAmmo(u));
+      const ls = TMM.Radio.linkState(game, u);
+      const pend = TMM.Radio.pendingFor(game, u.id).length;
+      set(r.cmd, 'rcmd' + u.id, '<span class="lk lk-' + ls.code + '"></span>' + esc(TMM.Orders.describe(game, u)) + ' · ' + esc(TMM.RADIO.ROE[u.roe].short) +
+        (ls.code === 'dead' ? ' · <b class="warn">교신 두절</b>' : '') + (pend ? ' · <b class="pend">((·)) 전달 중</b>' : ''), true);
       const c = TMM.Damage.condition(u);
       set(r.cond, 'rc' + u.id, '<span class="cond ' + c.cls + '">' + c.text + '</span>', true);
       if (cache.get('rdead' + u.id) !== u.destroyed) {
@@ -286,8 +299,8 @@ TMM.Panel = (function () {
       els.banner.hidden = !game.paused || !!game.over;
       els.banner.querySelector('.pb-title').textContent = game.started ? '일시정지' : '작전 대기';
       els.banner.querySelector('.pb-hint').textContent = game.started
-        ? '스페이스바를 누르면 재개합니다 · 정지 중에도 이동 지시 가능'
-        : '스페이스바를 누르면 작전을 개시합니다';
+        ? '스페이스바를 누르면 재개합니다 · 정지 중 내린 무전 명령은 재개하면 전달됩니다'
+        : '스페이스바를 누르면 작전을 개시합니다 · 지금 미리 무전 명령을 내려 둘 수 있습니다';
       document.querySelectorAll('[data-speed]').forEach((b) => {
         b.classList.toggle('active', Number(b.dataset.speed) === game.speedMult);
       });
@@ -307,7 +320,8 @@ TMM.Panel = (function () {
     if (c) {
       txt = contactLine(game, c).replace(/<[^>]+>/g, '');
       const sel = game.units.find((u) => u.id === game.selectedId);
-      if (sel && !c.wreck && !sel.destroyed && c.kind !== 'friendly') {
+      if (!c.known) txt = '';
+      else if (sel && !c.wreck && !sel.destroyed && c.kind !== 'friendly') {
         const d = Math.hypot(c.lastX - sel.x, c.lastY - sel.y) * game.map.metersPerCell;
         const inR = d <= TMM.AMMO[sel.ammoType].rangeM;
         const sees = c.visible && TMM.Intel.sees(game, sel, c.unit);
@@ -315,7 +329,8 @@ TMM.Panel = (function () {
         if (!sees) txt += ' · 본 차에서 안 보임';
         else if (!inR) txt += ' · 사거리 밖';
         else txt += ' · 명중 예상 ' + Math.round(TMM.Ballistics.hitChance(game.map, sel, c.unit, sel.ammoType, TMM.Intel.fireMods(game, sel, c.unit)) * 100) + '%';
-        txt += c.identified ? ' · 클릭하면 사격 목표' : ' · ⚠ 미식별 — 클릭하면 오인사격 위험을 안고 사격';
+        const to = TMM.Command.specName(game, game.cmd.to);
+        txt += c.identified ? ' · 클릭하면 ' + to + '에게 목표 지정' : ' · ⚠ 미식별 — 클릭하면 오인사격 위험을 안고 ' + to + '에게 목표 지정';
       }
     } else if (h) {
       const info = game.map.infoAt(h.x, h.y);

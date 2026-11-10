@@ -16,7 +16,7 @@ TMM.SENSORS = {
   },
   CHONMA: {
     day: { detect: 3000, idBase: 3.5, hitMul: 1 },
-    night: { detect: 1800, idBase: 12, hitMul: 0.7 }, // 열상 장비 없음: 밤에는 탐지·식별·사격 모두 크게 떨어짐
+    night: { detect: 2300, idBase: 8, hitMul: 0.85 }, // 열상 장비 없음: 밤에는 탐지·식별·사격이 떨어짐 (M4: 1800/12/0.7 → 2300/8/0.85, 야간이 너무 쉬웠음)
   },
 };
 

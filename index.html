@@ -46,13 +46,18 @@
       <div id="start" class="start" hidden>
         <div class="s-box" role="dialog" aria-labelledby="start-title">
           <div class="s-kicker">작전 명령 · K1A2 전차 소대</div>
-          <div class="s-title" id="start-title">탐지와 식별</div>
+          <div class="s-title" id="start-title">무전 지휘</div>
           <p class="s-brief">
-            적 천마호 전차 1개 소대(4대)가 북쪽 매봉 능선·새터읍에서 남하 중입니다. 소대는 주둔지를 지키며 적을 저지합니다.
+            적 천마호 전차 1개 소대(4대)가 북쪽 매봉 능선·새터읍에서 남하 중입니다. 소대(호출부호 <b>강철</b>)는 주둔지를 지키며 적을 저지합니다.
             적은 <b>보일 때만</b> 지도에 나타납니다. 처음엔 <b class="q">미상 표적 ?</b> 으로 뜨고, 몇 초 뒤 식별됩니다.
             전방에는 피아식별장치가 없는 <b class="f">아군 보병 분대</b>와 <b class="f">보급 트럭</b>이 있습니다 — 식별 전 사격은 오인사격 위험.
           </p>
-          <p class="s-brief">승리: 적을 모두 격파하거나, 전투력을 잃은 적이 지도 북쪽 끝 밖으로 물러나면 작전 성공.</p>
+          <p class="s-brief">
+            여러분은 <b>1호차(강철 1)</b>에 탄 소대장입니다. 1호차만 직접 움직이고, <b>2·3·4호차는 무전으로만</b> 지휘합니다.
+            명령은 몇 초 뒤 도착하고, 가끔 잘못 알아듣거나 잡음에 묻힙니다. 가만히 있으면 양옆에서 숨어 온 적에게 크게 당합니다 —
+            엄호 방향을 정해 주고, 표적을 지정하고, 엄폐물로 옮기십시오.
+          </p>
+          <p class="s-brief">승리: 적을 모두 격파하거나, 전투력을 잃은 적이 지도 북쪽 끝 밖으로 물러나면 작전 성공. 패배: 소대 전차 4대 중 3대가 격파되면 작전 실패.</p>
           <div class="s-label">작전 시간</div>
           <div class="s-opts" role="group" aria-label="주간 또는 야간">
             <button type="button" data-light="day" aria-pressed="true">
@@ -77,6 +82,16 @@
     </section>
 
     <aside class="side">
+      <section class="card cmd-card">
+        <h2>무전 지휘 · 강철 소대망</h2>
+        <div id="cmd" class="cmd"></div>
+      </section>
+
+      <section class="card log-card">
+        <h2>무전 기록</h2>
+        <ol id="radio-log" class="radio-log"></ol>
+      </section>
+
       <section class="card">
         <h2>선택 전차</h2>
         <div id="unit-info"></div>
@@ -94,23 +109,24 @@
         <p class="note">한 대가 본 표적은 소대 전체 지도에 표시됩니다. 사격은 그 표적이 직접 보이는 전차만 할 수 있습니다.</p>
       </section>
 
-      <section class="card log-card">
-        <h2>무전 기록</h2>
-        <ol id="radio-log" class="radio-log"></ol>
-      </section>
-
       <section class="card">
         <h2>조작법</h2>
         <dl class="keys">
-          <dt>전차 클릭 / 1~4</dt><dd>전차 선택</dd>
-          <dt>지도 클릭</dt><dd>선택한 전차 이동</dd>
-          <dt>표적 클릭</dt><dd>선택한 전차의 사격 목표 지정 (차체도 그쪽으로 돌림). 미상 표적도 지정할 수 있지만 오인사격 위험</dd>
-          <dt>Q</dt><dd>탄종 전환 (K276 철갑탄 ↔ K277 고폭탄)</dd>
-          <dt>X</dt><dd>사격 목표 해제 (식별된 적과 2km 안 자유 사격, 포탑만 돌림)</dd>
-          <dt>V</dt><dd>선택한 전차의 시야 표시 (어두운 곳은 안 보임)</dd>
-          <dt>스페이스바</dt><dd>일시정지 / 재개</dd>
-          <dt>S</dt><dd>선택한 전차 정지</dd>
-          <dt>Esc / 오른쪽 클릭</dt><dd>선택 해제</dd>
+          <dt>1~4 / 전차 클릭</dt><dd>전차 선택 (받는 대상도 그 전차)</dd>
+          <dt>5 · 6 · 7</dt><dd>받는 대상: 1조(1·2호차) · 2조(3·4호차) · 소대 전체</dd>
+          <dt>M</dt><dd>이동 → 지도 클릭</dd>
+          <dt>C</dt><dd>엄호 → 지켜볼 방향 클릭 (정지, 차체도 그쪽으로)</dd>
+          <dt>B</dt><dd>엄호 이동 → 목표 지점 클릭 (조별로 번갈아 전진)</dd>
+          <dt>T</dt><dd>목표 지정 → 표적 클릭 (빈 곳은 해제)</dd>
+          <dt>W</dt><dd>철수 → 위치 클릭 (처음엔 후진)</dd>
+          <dt>S · R</dt><dd>정지 · 상황 보고 요구</dd>
+          <dt>8 · 9 · 0</dt><dd>사격 금지 · 식별 후 사격 · 자유 사격</dd>
+          <dt>지도 클릭</dt><dd>1호차(지휘 전차)만 바로 이동. 2·3·4호차는 무전 명령으로만 움직임</dd>
+          <dt>표적 클릭</dt><dd>받는 대상에게 목표 지정 (1호차는 바로, 나머지는 무전)</dd>
+          <dt>Q · X</dt><dd>1호차 탄종 전환 · 목표 해제</dd>
+          <dt>V</dt><dd>선택한 전차의 시야 표시</dd>
+          <dt>스페이스바</dt><dd>일시정지 / 재개 (정지 중에도 명령 가능 — 재개하면 전달 시작)</dd>
+          <dt>Esc / 오른쪽 클릭</dt><dd>고른 명령 취소 · 선택 해제</dd>
         </dl>
       </section>
 
@@ -122,6 +138,8 @@
           <li><span class="sym sym-ally"></span><span>아군 보병·트럭·K2 (식별됨)</span></li>
           <li><span class="sym sym-ghost"></span><span>흐린 점선 — 놓친 표적의 마지막 위치</span></li>
           <li><span class="sym sym-hull"></span><span>녹색 반원 — 차체 엄폐 (포탑만 보임)</span></li>
+          <li><span class="sym sym-watch"></span><span>부채꼴 — 엄호 중, 지켜보는 방향</span></li>
+          <li><span class="sym sym-radio">((·))</span><span>무전 명령 전달 중 · <b class="sym-x">무전✕</b> 교신 두절</span></li>
         </ul>
       </section>
 
@@ -136,6 +154,7 @@
   <!-- 순서 중요: core → map → units → game/ui → render → main -->
   <script src="js/core/config.js"></script>
   <script src="js/core/noise.js"></script>
+  <script src="js/radio/radio-config.js"></script>
   <script src="js/map/terrain-types.js"></script>
   <script src="js/map/geography.js"></script>
   <script src="js/map/mapgen.js"></script>
@@ -151,12 +170,16 @@
   <script src="js/units/enemy.js"></script>
   <script src="js/units/allies.js"></script>
   <script src="js/game/intel.js"></script>
+  <script src="js/game/orders.js"></script>
+  <script src="js/radio/radio-net.js"></script>
+  <script src="js/game/command.js"></script>
   <script src="js/ai/enemy-ai.js"></script>
   <script src="js/game/battle.js"></script>
   <script src="js/game/clock.js"></script>
   <script src="js/ui/radio-log.js"></script>
   <script src="js/ui/panel.js"></script>
   <script src="js/ui/result.js"></script>
+  <script src="js/ui/command-bar.js"></script>
   <script src="js/render/terrain-layer.js"></script>
   <script src="js/render/renderer.js"></script>
   <script src="js/game/input.js"></script>

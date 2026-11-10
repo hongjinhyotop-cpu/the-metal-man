@@ -15,6 +15,7 @@
       hoverContactId: null,
       showSight: false, // V 키: 선택 전차의 시야 표시
       fx: [], // 화면 효과 (사격 궤적, 피탄 섬광)
+      cmd: { to: '1', mode: null }, // M4 무전 지휘: 받는 대상, 지도 클릭을 기다리는 명령
     });
     return game;
   }
@@ -57,87 +58,108 @@
     const unitById = (id) => game.units.find((u) => u.id === id);
     const km = (m) => (m / 1000).toFixed(1) + 'km';
     const I = TMM.Intel;
-    const nameOf = (t) => {
-      const c = I.contact(game, 'friend', t.id);
-      return c ? I.displayName(c) : '미상 표적';
+
+    const ctrlUnit = () => TMM.Radio.controlUnit(game);
+    const cmd = game.cmd;
+    const logLines = (lines) => { for (const l of lines) log(l.from, l.text, l.kind); };
+    const issue = (order) => {
+      logLines(TMM.Command.issue(game, cmd.to, order).lines);
+      cmd.mode = null;
+    };
+    // 받는 대상이 지휘 전차 한 대인가 (그렇다면 직접 조작)
+    const directOnly = () => {
+      const us = TMM.Command.recipients(game, cmd.to);
+      return us.length === 1 && us[0] === ctrlUnit();
     };
 
     const actions = {
       select(id) {
         game.selectedId = id && unitById(id) ? id : null;
+        if (game.selectedId) {
+          cmd.to = String(id);
+          cmd.mode = null;
+        }
       },
-      move(id, x, y) {
-        const u = unitById(id);
+      setTo(spec) {
+        cmd.to = spec;
+        cmd.mode = null;
+        if (/^[1-4]$/.test(spec)) game.selectedId = Number(spec);
+      },
+      // 명령 버튼·단축키. 위치·표적이 필요한 명령은 지도 클릭을 기다린다.
+      pickOrder(id) {
         if (game.over) return;
-        if (u.destroyed) {
-          log(u.callsign, '(응답 없음) — 격파된 전차입니다.', 'warn');
-          return;
-        }
-        if (u.damage.track) {
-          log(u.callsign, '궤도 손상으로 기동 불가. 현 위치에서 사격만 가능.', 'warn');
-          return;
-        }
-        const res = TMM.Movement.order(game.map, u, x, y);
-        const grid = game.map.gridRef(x, y);
-        if (!res.ok) {
-          log(u.callsign, '이동 불가 — ' + res.reason + ' (격자 ' + grid + ')', 'warn');
-          return;
-        }
-        const dest = game.map.infoAt(x, y).name;
-        log('소대장', u.callsign + ', 격자 ' + grid + ' (' + dest + ') 로 이동하라.', 'order');
-        log(u.callsign, '수신. 이동 개시. 거리 ' + (res.meters / 1000).toFixed(1) + 'km, ' + TMM.Clock.duration(res.eta) + ' 소요 예상.', 'report');
+        if (id === 'stop') return issue({ type: 'stop' });
+        if (id === 'report') return issue({ type: 'report' });
+        cmd.mode = cmd.mode === id ? null : id;
       },
-      stop(id) {
-        const u = unitById(id);
-        if (u.state !== 'moving') return;
-        TMM.Movement.stop(u);
-        log('소대장', u.callsign + ', 현 위치에서 정지하라.', 'order');
-        log(u.callsign, '수신. 정지 완료.', 'report');
+      setRoe(roe) {
+        if (game.over) return;
+        issue({ type: 'roe', roe });
       },
-      // 사격 목표 지정 (지도에 보이는 접촉을 클릭)
-      target(id, targetId) {
-        const u = unitById(id);
+      cancel() {
+        if (cmd.mode) cmd.mode = null;
+        else game.selectedId = null;
+      },
+      // 지도(빈 곳) 클릭
+      mapClick(x, y) {
+        if (game.over) return;
+        const info = game.map.infoAt(x, y);
+        const mode = cmd.mode;
+        if (mode === 'target') return issue({ type: 'target', targetId: null });
+        if (mode === 'cover') return issue({ type: 'cover', x, y });
+        if (mode === 'move' || mode === 'withdraw' || mode === 'bound') {
+          if (!info || !info.speed) {
+            toast((info ? info.name : '작전 지역 밖') + ' — 전차가 갈 수 없는 곳입니다.', 'warn');
+            return;
+          }
+          return issue({ type: mode, x, y });
+        }
+        if (directOnly()) {
+          if (!info || !info.speed) {
+            log(ctrlUnit().callsign, '이동 불가 — ' + (info ? info.name + ' 지역은 전차가 들어갈 수 없습니다' : '작전 지역 밖입니다') + '.', 'warn');
+            return;
+          }
+          return issue({ type: 'move', x, y });
+        }
+        toast(TMM.Command.specName(game, cmd.to) + '은(는) 무전으로만 움직입니다 — [이동 M] 등 명령을 고른 뒤 지도를 클릭하십시오.', 'warn');
+      },
+      // 지도 위 접촉(표적) 클릭: 목표 지정 (지휘 전차면 바로, 아니면 무전)
+      contactClick(targetId) {
+        if (game.over) return;
         const c = I.contact(game, 'friend', targetId);
-        if (!u || !c || game.over) return;
-        const t = c.unit;
+        if (!c) return;
         const name = I.displayName(c);
-        if (u.destroyed) {
-          log(u.callsign, '(응답 없음) — 격파된 전차입니다.', 'warn');
-          return;
+        if (cmd.mode && cmd.mode !== 'target') {
+          // 위치가 필요한 명령 중이면 표적 위치를 지점으로 쓴다
+          return actions.mapClick(c.visible ? c.unit.x : c.lastX, c.visible ? c.unit.y : c.lastY);
         }
         if (c.wreck) {
-          log(u.callsign, name + ' 는 이미 격파됨.', 'report');
+          log('체계', name + ' 는 이미 격파됨.', 'report');
           return;
         }
         if (c.identified && c.kind === 'friendly') {
-          log(u.callsign, name + ' 는 아군입니다. 사격 불가.', 'warn');
+          log('체계', name + ' 는 아군입니다. 사격 불가.', 'warn');
           toast(name + ' — 아군입니다. 사격할 수 없습니다.', 'warn');
+          cmd.mode = null;
           return;
         }
-        u.targetId = t.id;
-        log('소대장', u.callsign + ', ' + name + ' 사격하라.', 'order');
         if (!c.identified) {
-          log(u.callsign, '⚠ 미식별 표적입니다. 아군일 수 있음 — 오인사격 위험. 지시대로 사격하겠음.', 'warn');
+          log('체계', '⚠ ' + name + ' 은(는) 미식별 표적 — 아군일 수 있음. 오인사격 위험.', 'warn');
           toast('⚠ ' + name + ' 은(는) 아직 식별되지 않았습니다 — 오인사격 위험', 'warn');
         }
-        const d = TMM.Ballistics.distanceM(game.map, u, t);
-        if (u.damage.gun) log(u.callsign, '주포 손상, 사격 불가.', 'warn');
-        else if (TMM.Damage.totalAmmo(u) <= 0) log(u.callsign, '잔탄 없음, 사격 불가.', 'warn');
-        else if (!c.visible) log(u.callsign, '수신. 표적 소실 상태. 재포착 시 사격.', 'report');
-        else if (!I.sees(game, u, t)) log(u.callsign, '수신. 본 차에서는 표적이 보이지 않음. 시야에 들어오면 사격.', 'report');
-        else if (d > TMM.AMMO[u.ammoType].rangeM) log(u.callsign, '수신. 거리 ' + km(d) + ', 사거리 밖. 접근 시 사격.', 'report');
-        else log(u.callsign, '수신. 거리 ' + km(d) + ', 조준 중.', 'report');
+        issue({ type: 'target', targetId });
       },
-      clearTarget(id) {
-        const u = unitById(id);
-        if (!u || u.targetId == null) return;
-        u.targetId = null;
-        log('소대장', u.callsign + ', 지정 목표 해제. 식별된 적과 자유 교전.', 'order');
+      clearTarget() {
+        issue({ type: 'target', targetId: null });
       },
-      // 탄종 전환 (K276 ↔ K277)
-      cycleAmmo(id) {
-        const u = unitById(id);
-        if (!u || u.destroyed || game.over) return;
+      // 탄종 전환 (지휘 전차만. 다른 전차는 승무원이 알아서 바꾼다)
+      cycleAmmo() {
+        const u = ctrlUnit();
+        if (!u || game.over) return;
+        if (!directOnly()) {
+          toast('탄종 전환은 지휘 전차(1호차)만 직접 합니다. 다른 전차는 탄이 떨어지면 스스로 바꿉니다.', 'warn');
+          return;
+        }
         const types = TMM.VEHICLES[u.model].ammoTypes;
         const next = types[(types.indexOf(u.ammoType) + 1) % types.length];
         if (u.ammo[next] <= 0) {
@@ -157,7 +179,7 @@
         game.paused = !game.paused;
         if (!game.paused && !game.started) {
           game.started = true;
-          log('중대', '작전 개시. 식별된 적과 자유 교전하라. 미식별 표적은 확인 후 사격.', 'system');
+          log(TMM.RADIO.COMPANY, TMM.RADIO.NET + ', 여기 ' + TMM.RADIO.COMPANY + '. 작전 개시. 식별된 적과 교전하라. 미식별 표적은 확인 후 사격. 이상.', 'system');
         }
       },
       setSpeed(mult) {
@@ -167,6 +189,7 @@
 
     TMM.RadioLog.init(document.getElementById('radio-log'));
     TMM.Panel.init(game, actions.select);
+    TMM.CommandBar.init(game, actions);
     TMM.Result.init();
     TMM.Input.init(game, canvas, view, actions);
 
@@ -177,125 +200,53 @@
 
     log('체계', '작전 지도 로드 완료. K1A2 전차 4대 주둔지 대기 중. ' + TMM.LIGHT[light].name + ' 작전.', 'system');
 
-    // 전투 사건 → 무전 기록 + 화면 효과
-    const PART_LINES = {
-      track: '궤도 손상, 기동 불가',
-      engine: '엔진 손상, 속도 저하',
-      gun: '주포 손상, 사격 불가',
-      fcs: '사격통제장치 손상, 명중률 저하',
-      radio: '무전기 손상',
-    };
-    const partsText = (parts) => parts.map((k) => PART_LINES[k]).join(', ');
-    const ASP = TMM.Ballistics.ASPECT_NAMES;
-    const callsignOf = (id) => {
-      const u = unitById(id);
-      return u ? u.callsign : '소대망';
-    };
-
+    // 무전망(TMM.Radio)이 만든 교신과, 무전망을 거치지 않는 알림(전장관리체계 경고·중대 무전·화면 효과)
     function report(ev, realT) {
-      if (ev.type === 'arrive') {
-        const u = ev.unit;
-        const where = game.map.infoAt(u.x, u.y).name;
-        log(u.callsign, '목표 지점 도착. 격자 ' + game.map.gridRef(u.x, u.y) + ' (' + where + ').', 'report');
-      } else if (ev.type === 'contact-new') {
-        if (ev.side !== 'friend') return;
-        const c = ev.contact, t = ev.unit;
-        const d = km(c.dist);
-        if (c.identified) {
-          // 피아식별장치 응답
-          log(callsignOf(ev.by), t.callsign + ' 탐지 — 피아식별 응답, 아군. (거리 ' + d + ')', 'report');
-        } else {
-          log(callsignOf(ev.by), '미상 표적 ' + c.label + ' 탐지. 격자 ' + game.map.gridRef(t.x, t.y) + ', 거리 ' + d + '. 식별 중.', 'report');
-        }
+      if (ev.type === 'radio') {
+        log(ev.from, ev.text, ev.kind);
       } else if (ev.type === 'contact-id') {
-        if (ev.side !== 'friend' || ev.how === 'iff') return;
+        if (ev.side !== 'friend' || ev.how === 'iff' || !ev.contact.known) return;
         const c = ev.contact, t = ev.unit;
-        if (c.kind === 'hostile') {
-          log(callsignOf(c.seenBy[0]), '미상 표적 ' + c.label + ', ' + (TMM.VEHICLES[t.model].cls === 'tank' ? '적 천마호 전차로' : '적으로') + ' 식별. (' + t.callsign + ')', 'report');
-        } else {
-          log('소대망', '미상 표적 ' + c.label + ' 은(는) ' + t.callsign + '! 아군이다. 사격 금지.', 'warn');
+        if (c.kind === 'friendly') {
+          log('전장관리체계', '미상 표적 ' + c.label + ' 은(는) ' + t.callsign + '! 아군이다. 사격 금지.', 'warn');
           toast('미상 표적 ' + c.label + ' = ' + t.callsign + ' (아군) — 사격 금지', 'warn');
         }
-      } else if (ev.type === 'cease-fire') {
-        log(ev.unit.callsign, '사격 중지! 표적은 ' + ev.target.callsign + ', 아군입니다.', 'warn');
       } else if (ev.type === 'shot') {
         const { shooter: s, target: t, res } = ev;
         game.fx.push({ t: realT, x0: s.x, y0: s.y, x1: t.x, y1: t.y, side: s.side, hit: res.hit, pen: res.pen, kill: res.destroyed });
-        if (s.side === 'friend') {
-          const what = TMM.AMMO[ev.ammoId].short;
-          if (ev.friendlyFire) {
-            const r = !res.hit ? '빗나감' : res.destroyed ? (t.model === 'INF' ? '분대 전투력 상실' : '파괴') : t.model === 'INF' ? '사상자 발생' : '손상';
-            log('⚠ 오인사격', s.callsign + '이(가) ' + t.callsign + '에 사격! (' + km(res.distM) + ') — ' + r + '.', 'ff');
-            log(t.callsign, '사격 중지! 사격 중지! 여기는 아군이다!', 'ff');
-            toast('⚠ 오인사격! ' + s.callsign + ' → ' + t.callsign + ' (' + r + ')', 'ff');
-            return;
-          }
-          const tname = ev.unidentified ? '미식별 표적' : t.callsign;
-          if (res.destroyed) {
-            log(s.callsign, tname + ' 격파. (' + what + ', ' + km(res.distM) + ')' + (ev.unidentified ? ' 확인 결과 ' + t.callsign + '.' : ''), 'kill');
-            return;
-          }
-          let r;
-          if (!res.hit) r = '빗나감.';
-          else if (ev.fresh.length) r = '명중. ' + (res.pen ? '' : '외부 손상: ') + ev.fresh.map((k) => TMM.PARTS[k].name).join('·') + ' 손상.';
-          else if (res.pen) r = '명중, 관통. 효과 미확인.';
-          else r = '명중, 관통 실패.';
-          log(s.callsign, tname + '에 ' + what + ' 사격 (' + km(res.distM) + '). ' + r, ev.unidentified ? 'warn' : 'fire');
-        } else {
-          const from = nameOf(s);
-          if (t.ally) {
-            if (res.destroyed) log('중대', t.callsign + ' 피격! ' + (t.model === 'INF' ? '전투력 상실.' : '격파됨.'), 'loss');
-            else if (res.hit) log(t.callsign, '피격! 피해 발생.', 'warn');
-            return;
-          }
-          if (!res.hit) {
-            // 적 포탄이 빗나간 것은 같은 전차에 대해 게임 60초에 한 번만 알린다 (기록이 넘치지 않게)
-            if (!(t.lastMissLog > game.gameSeconds - 60)) {
-              t.lastMissLog = game.gameSeconds;
-              log(t.callsign, from + '의 포격, 근탄. 피해 없음.', 'report');
-            }
-          }
-          else if (res.destroyed) log('소대망', t.callsign + ' 피격, 격파됨! (' + ASP[res.aspect] + ', ' + km(res.distM) + ')', 'loss');
-          else if (ev.fresh.length) log(t.callsign, '피탄! ' + ASP[res.aspect] + (res.pen ? ' 관통. ' : '. ') + partsText(ev.fresh) + '.', 'warn');
-          else if (res.pen) log(t.callsign, '피탄! ' + ASP[res.aspect] + ' 관통, 피해 경미.', 'warn');
-          else log(t.callsign, '피탄! ' + ASP[res.aspect] + ' 장갑이 막아냄.', 'warn');
+        if (s.side === 'friend' && ev.friendlyFire) {
+          const r = !res.hit ? '빗나감' : res.destroyed ? (t.model === 'INF' ? '분대 전투력 상실' : '파괴') : t.model === 'INF' ? '사상자 발생' : '손상';
+          log('⚠ 오인사격', s.callsign + '이(가) ' + t.callsign + '에 사격! (' + km(res.distM) + ') — ' + r + '.', 'ff');
+          log(t.callsign, '사격 중지! 사격 중지! 여기는 아군이다!', 'ff');
+          toast('⚠ 오인사격! ' + s.callsign + ' → ' + t.callsign + ' (' + r + ')', 'ff');
+        } else if (s.side === 'enemy' && t.ally) {
+          if (res.destroyed) log(TMM.RADIO.COMPANY, t.callsign + ' 피격! ' + (t.model === 'INF' ? '전투력 상실.' : '격파됨.'), 'loss');
+          else if (res.hit) log(t.callsign, '피격! 피해 발생.', 'warn');
         }
-      } else if (ev.type === 'ammo-switch') {
-        if (ev.unit.side === 'friend') {
-          log(ev.unit.callsign, TMM.AMMO[ev.from].short + ' 소진. ' + TMM.AMMO[ev.to].short + '으로 전환.', 'warn');
-        }
-      } else if (ev.type === 'enemy-engage') {
-        const c = I.contact(game, 'friend', ev.unit.id);
-        if (c && c.visible && c.identified && !ev.unit.ai.reported) {
-          ev.unit.ai.reported = true;
-          log('소대망', ev.unit.callsign + ' 정지, 사격 자세. 격자 ' + game.map.gridRef(ev.unit.x, ev.unit.y) + '.', 'report');
-        }
-      } else if (ev.type === 'enemy-retreat') {
-        const c = I.contact(game, 'friend', ev.unit.id);
-        if (c && c.visible && c.identified) log('소대망', ev.unit.callsign + ' 후퇴 중.', 'report');
       } else if (ev.type === 'enemy-break') {
-        log('중대', '적 무전 감청: 천마호 소대 퇴각 명령. 적이 북쪽으로 물러난다. 끝까지 쫓을 필요 없음.', 'system');
+        log(TMM.RADIO.COMPANY, '적 무전 감청: 천마호 소대 퇴각 명령. 적이 북쪽으로 물러난다. 끝까지 쫓을 필요 없음.', 'system');
       } else if (ev.type === 'enemy-abandon') {
         const c = I.contact(game, 'friend', ev.unit.id);
-        if (c && c.visible) log('소대망', I.displayName(c) + ' 승무원 탈출, 전차 유기.', 'report');
+        if (c && c.visible) log('전장관리체계', I.displayName(c) + ' 승무원 탈출, 전차 유기.', 'report');
       } else if (ev.type === 'enemy-exit') {
-        log('중대', '적 전차 1대 작전 지역 북쪽 밖으로 이탈.', 'report');
+        log(TMM.RADIO.COMPANY, '적 전차 1대 작전 지역 북쪽 밖으로 이탈.', 'report');
       } else if (ev.type === 'ally-move') {
         const u = ev.unit;
         if (u.model === 'INF') log(u.callsign, '적 전차 접근. 관측초소에서 주둔지로 도보 철수한다.', 'report');
-        else if (u.model === 'TRUCK') log('중대', '보급 트럭이 관측초소에서 국도로 주둔지에 복귀한다. 피아식별장치 없음, 오인사격 주의.', 'system');
-        else log('중대', '인접 중대 K2 전차 1대가 동부 도로로 와서 주둔지를 지나 남쪽으로 이동한다.', 'system');
+        else if (u.model === 'TRUCK') log(TMM.RADIO.COMPANY, '보급 트럭이 관측초소에서 국도로 주둔지에 복귀한다. 피아식별장치 없음, 오인사격 주의.', 'system');
+        else log(TMM.RADIO.COMPANY, '인접 중대 K2 전차 1대가 동부 도로로 와서 주둔지를 지나 남쪽으로 이동한다.', 'system');
       } else if (ev.type === 'over') {
         if (ev.win) {
-          if (game.enemies.some((e) => e.exited)) log('중대', '적 천마호 소대 퇴각 확인. 진지 사수, 작전 성공. 수고했다.', 'system');
-          else log('중대', '적 천마호 소대 격멸 확인. 수고했다.', 'system');
-        } else log('중대', '소대 교신 두절… 작전 실패.', 'system');
+          if (game.enemies.some((e) => e.exited)) log(TMM.RADIO.COMPANY, '적 천마호 소대 퇴각 확인. 진지 사수, 작전 성공. 수고했다.', 'system');
+          else log(TMM.RADIO.COMPANY, '적 천마호 소대 격멸 확인. 수고했다.', 'system');
+        } else log(TMM.RADIO.COMPANY, '강철, 여기 강철 6. 강철 소대 전투력 상실 확인. 남은 전차는 주둔지로 철수하라. 작전 실패.', 'system');
         TMM.Result.show(game);
       }
     }
 
-    log('중대', '적 천마호 전차 1개 소대(4대), 매봉 능선·새터읍 일대에서 남하 중. 소대는 저지하라.', 'system');
-    log('중대', '전방 저수지 동쪽 숲에 아군 보병 분대(관측초소)와 보급 트럭이 있다. 둘 다 피아식별장치 없음 — 식별 전 사격 주의.', 'system');
+    log(TMM.RADIO.COMPANY, '강철, 여기 강철 6. 적 천마호 전차 1개 소대(4대), 매봉 능선·새터읍 일대에서 남하 중. 강철은 주둔지를 지키며 저지하라. 이상.', 'system');
+    log(TMM.RADIO.COMPANY, '전방 저수지 동쪽 숲에 아군 보병 분대(관측초소)와 보급 트럭이 있다. 둘 다 피아식별장치 없음 — 식별 전 사격 주의. 이상.', 'system');
+    log('체계', '1호차는 직접 조작, 2·3·4호차는 무전으로 지휘합니다. 오른쪽 위 [무전 지휘] 창에서 받는 대상과 명령을 고르십시오.', 'system');
 
     let last = performance.now();
     function frame(now) {
@@ -315,6 +266,7 @@
       game.fx = game.fx.filter((f) => now / 1000 - f.t < C.FX_SECONDS);
       TMM.Renderer.drawFrame(ctx, view, game, terrain, now / 1000);
       TMM.Panel.update(game);
+      TMM.CommandBar.update(game);
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);

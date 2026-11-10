@@ -1,6 +1,6 @@
 /*
  * 승패 결과 화면 (간단판).
- *   승리: 적 천마호 소대를 모두 격파했거나, 전투력을 잃은 적이 북쪽 끝 밖으로 퇴각 / 패배: 아군 4대 모두 격파
+ *   승리: 적 천마호 소대를 모두 격파했거나, 전투력을 잃은 적이 북쪽 끝 밖으로 퇴각 / 패배: 아군 3대 이상 격파 (M4)
  */
 TMM.Result = (function () {
   let el = null;
@@ -25,7 +25,7 @@ TMM.Result = (function () {
     el.classList.toggle('lose', !win);
     el.querySelector('.r-title').textContent = win ? '작전 성공' : '작전 실패';
     el.querySelector('.r-sub').textContent = !win
-      ? '소대의 전차가 모두 격파되었습니다.'
+      ? '소대 전차 ' + lost + '대가 격파되어 소대가 전투력을 잃었습니다.'
       : gone || aband
         ? '적 천마호 소대가 전투력을 잃고 북쪽으로 퇴각했습니다.'
         : '적 천마호 전차 소대를 격멸했습니다.';

@@ -1,11 +1,12 @@
 /*
- * 전투 한 틱 진행: 이동 → 아군(비지휘) 행동 → 시야·식별 → 적 AI → 사격 → 승패 판정.
+ * 전투 한 틱 진행: 무전망(명령 전달) → 이동 → 아군(비지휘) 행동 → 시야·식별 → 명령 수행·엄호 이동 → 적 AI → 사격
+ *                → 피격 시 스스로 판단 → 자동 보고 → 승패 판정.
  * main.js 의 주 루프와 시험용 모의 전투가 같은 코드를 쓴다.
  * 반환: 이번 틱에 일어난 사건 배열 (무전 기록·화면 효과용)
  *
  * 승패 (M3):
  *   승리 — 적 소대가 모두 격파되었거나, 전투력을 잃고 지도 북쪽 끝 밖으로 퇴각함 (끝까지 쫓지 않아도 됨)
- *   패배 — 아군 소대 전차 4대가 모두 격파됨
+ *   패배 — 아군 소대 전차가 CONFIG.PLATOON_LOSS_FAIL(3)대 이상 격파됨 → 소대 전투력 상실 (M4)
  */
 TMM.Battle = (function () {
   function create(opts) {
@@ -26,6 +27,8 @@ TMM.Battle = (function () {
       rand: (opts && opts.rand) || Math.random,
     };
     TMM.Intel.init(game);
+    TMM.Orders.init(game);
+    TMM.Radio.init(game);
     return game;
   }
 
@@ -33,6 +36,7 @@ TMM.Battle = (function () {
   function step(game, gdt) {
     const events = [];
     game.gameSeconds += gdt;
+    TMM.Radio.update(game, gdt, events);
     for (const u of game.units) {
       if (TMM.Movement.update(game.map, u, gdt)) events.push({ type: 'arrive', unit: u });
     }
@@ -40,8 +44,11 @@ TMM.Battle = (function () {
     for (const a of game.allies) if (!a.exited && !a.destroyed) TMM.Movement.update(game.map, a, gdt);
     TMM.Allies.update(game, gdt, events);
     TMM.Intel.update(game, gdt, events);
+    TMM.Orders.update(game, gdt);
     TMM.EnemyAI.update(game, gdt, events);
     TMM.Gunnery.update(game, gdt, events);
+    TMM.Orders.onEvents(game, events);
+    TMM.Radio.onEvents(game, events);
     for (const ev of events) {
       if (ev.type === 'shot') {
         game.lastShotAt = game.gameSeconds;
@@ -51,7 +58,7 @@ TMM.Battle = (function () {
 
     if (!game.over) {
       if (game.enemies.every((e) => e.destroyed || e.exited)) game.over = { win: true, at: game.gameSeconds };
-      else if (game.units.every((u) => u.destroyed)) game.over = { win: false, at: game.gameSeconds };
+      else if (game.units.filter((u) => u.destroyed).length >= TMM.CONFIG.PLATOON_LOSS_FAIL) game.over = { win: false, at: game.gameSeconds };
       if (game.over) {
         for (const u of game.units.concat(game.enemies)) u.fire.targetId = null;
         events.push({ type: 'over', win: game.over.win });

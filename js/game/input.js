@@ -1,9 +1,11 @@
 /*
- * 마우스·키보드 입력.
- *   전차 클릭: 선택 / 지도 클릭: 선택 전차 이동 지시
- *   표적 클릭(적·미상 표적): 선택 전차의 사격 목표 지정 (지도에 보이는 접촉만 클릭할 수 있다)
- *   스페이스바: 일시정지·재개 / 1~4: 호차 선택 / S: 정지 / Esc: 선택 해제
- *   Q: 탄종 전환 / X: 사격 목표 해제 / V: 선택 전차의 시야 표시
+ * 마우스·키보드 입력 (M4: 무전 지휘).
+ *   전차 클릭 / 1~4: 전차 선택 (받는 대상도 그 전차로) · 5 1조 · 6 2조 · 7 소대 전체
+ *   지도 클릭: 고른 명령의 위치 지정. 명령을 고르지 않았으면 지휘 전차(1호차)만 이동.
+ *   표적 클릭: 받는 대상에게 목표 지정 (1호차는 바로, 2·3·4호차는 무전)
+ *   M 이동 · C 엄호 · B 엄호 이동 · T 목표 지정 · W 철수 · S 정지 · R 상황 보고
+ *   8 사격 금지 · 9 식별 후 사격 · 0 자유 사격
+ *   Q 탄종 전환(1호차) · X 목표 해제 · V 시야 표시 · 스페이스바 일시정지 · Esc/오른쪽 클릭 취소
  */
 TMM.Input = (function () {
   function init(game, canvas, view, actions) {
@@ -20,12 +22,14 @@ TMM.Input = (function () {
       const overMark = overUnit ? null : TMM.Renderer.hitUnit(view, TMM.Renderer.contactMarks(game), p.x, p.y);
       game.hoverContactId = overMark ? overMark.id : null;
       let cursor = 'default';
+      const mode = game.cmd.mode;
       if (overUnit) cursor = 'pointer';
       else if (overMark) {
         const c = overMark.contact;
-        cursor = game.selectedId && !c.wreck && c.kind !== 'friendly' ? 'crosshair' : 'help';
+        cursor = !c.wreck && c.kind !== 'friendly' ? 'crosshair' : 'help';
       }
-      else if (game.selectedId && game.hover) {
+      else if (mode === 'cover' || mode === 'target') cursor = 'crosshair';
+      else if (game.hover && (mode || game.cmd.to === String(game.selectedId))) {
         cursor = game.map.infoAt(m.x, m.y).speed ? 'crosshair' : 'not-allowed';
       }
       canvas.style.cursor = cursor;
@@ -45,19 +49,18 @@ TMM.Input = (function () {
       }
       const mark = TMM.Renderer.hitUnit(view, TMM.Renderer.contactMarks(game), p.x, p.y);
       if (mark) {
-        if (game.selectedId) actions.target(game.selectedId, mark.id);
+        actions.contactClick(mark.id);
         return;
       }
-      if (!game.selectedId) return;
       const m = view.toMap(p.x, p.y);
       if (game.map.typeAt(m.x, m.y) < 0) return;
-      actions.move(game.selectedId, m.x, m.y);
+      actions.mapClick(m.x, m.y);
     });
 
-    // 오른쪽 클릭: 선택 해제
+    // 오른쪽 클릭: 고른 명령 취소, 없으면 선택 해제
     canvas.addEventListener('contextmenu', (ev) => {
       ev.preventDefault();
-      actions.select(null);
+      actions.cancel();
     });
 
     window.addEventListener('keydown', (ev) => {
@@ -67,27 +70,21 @@ TMM.Input = (function () {
         if (!ev.repeat) actions.togglePause();
         return;
       }
-      if (/^Digit[1-4]$/.test(ev.code) || /^Numpad[1-4]$/.test(ev.code)) {
-        actions.select(Number(ev.code.slice(-1)));
-        return;
-      }
-      if (ev.code === 'KeyS' && game.selectedId) {
-        actions.stop(game.selectedId);
-        return;
-      }
-      if (ev.code === 'KeyQ' && game.selectedId) {
-        actions.cycleAmmo(game.selectedId);
-        return;
-      }
-      if (ev.code === 'KeyX' && game.selectedId) {
-        actions.clearTarget(game.selectedId);
-        return;
-      }
-      if (ev.code === 'KeyV') {
-        actions.toggleSight();
-        return;
-      }
-      if (ev.code === 'Escape') actions.select(null);
+      if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+      const digit = /^(Digit|Numpad)[0-9]$/.test(ev.code) ? ev.code.slice(-1) : null;
+      if (digit && '1234'.includes(digit)) return actions.select(Number(digit));
+      if (digit === '5') return actions.setTo('T1');
+      if (digit === '6') return actions.setTo('T2');
+      if (digit === '7') return actions.setTo('ALL');
+      if (digit === '8') return actions.setRoe('hold');
+      if (digit === '9') return actions.setRoe('id');
+      if (digit === '0') return actions.setRoe('free');
+      const ORDER_KEYS = { KeyM: 'move', KeyC: 'cover', KeyB: 'bound', KeyT: 'target', KeyW: 'withdraw', KeyS: 'stop', KeyR: 'report' };
+      if (ORDER_KEYS[ev.code]) return actions.pickOrder(ORDER_KEYS[ev.code]);
+      if (ev.code === 'KeyQ') return actions.cycleAmmo();
+      if (ev.code === 'KeyX') return actions.clearTarget();
+      if (ev.code === 'KeyV') return actions.toggleSight();
+      if (ev.code === 'Escape') actions.cancel();
     });
 
     // 버튼에 포커스가 있을 때 스페이스바가 버튼을 누르지 않게

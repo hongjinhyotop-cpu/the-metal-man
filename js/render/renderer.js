@@ -376,6 +376,7 @@ TMM.Renderer = (function () {
   function contactMarks(game) {
     const out = [];
     for (const c of game.intel.friend.contacts.values()) {
+      if (!c.known) continue; // 무전기 손상 전차만 본 것은 소대 지도에 없다 (M4)
       const x = c.visible ? c.unit.x : c.lastX, y = c.visible ? c.unit.y : c.lastY;
       out.push({ id: c.id, x, y, contact: c, destroyed: c.wreck });
     }
@@ -462,6 +463,112 @@ TMM.Renderer = (function () {
     }
   }
 
+  // ---- M4 무전 지휘 표시 ----
+  // 엄호 중인 전차의 감시 부채꼴, 엄호 이동 목표 지점
+  function drawOrders(ctx, view, game) {
+    const half = (TMM.RADIO.WATCH_HALF_DEG * Math.PI) / 180;
+    for (const u of game.units) {
+      if (u.destroyed || u.watch == null || u.state === 'moving') continue;
+      const p = view.toScreen(u.x, u.y);
+      const r = Math.max(34, view.scale * 9);
+      const color = TMM.TEAMS[u.team].color;
+      ctx.save();
+      ctx.globalAlpha = 0.16;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.arc(p.x, p.y, r, u.watch - half, u.watch + half);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 0.6;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 4]);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, u.watch - half, u.watch + half);
+      ctx.stroke();
+      ctx.restore();
+    }
+    const b = game.bound;
+    if (b) {
+      const p = view.toScreen(b.P.x, b.P.y);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(240, 225, 160, 0.85)';
+      ctx.fillStyle = 'rgba(240, 225, 160, 0.85)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y + 8); ctx.lineTo(p.x, p.y - 14);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y - 14); ctx.lineTo(p.x + 11, p.y - 10); ctx.lineTo(p.x, p.y - 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.font = '600 10px ' + FONT_MONO;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('엄호 이동 목표 · ' + b.moving + '조 ' + (b.phase === 'moving' ? '전진' : '보고'), p.x + 14, p.y - 10);
+      ctx.restore();
+    }
+  }
+
+  // 전차 위 무전 표시: 명령 전달 중 ((·)), 교신 두절 '무전✕'
+  function drawBadges(ctx, view, game, time) {
+    const ctrl = TMM.Radio.controlUnit(game);
+    for (const u of game.units) {
+      if (u.destroyed) continue;
+      const p = view.toScreen(u.x, u.y);
+      ctx.save();
+      ctx.font = '700 10px ' + FONT_MONO;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      const pend = TMM.Radio.pendingFor(game, u.id);
+      if (pend.length) {
+        const st = pend.some((q) => q.state === 'garble' || q.state === 'noack') ? 'garble' : pend[0].state;
+        ctx.globalAlpha = 0.55 + 0.45 * Math.sin(time * 8);
+        ctx.fillStyle = st === 'garble' || st === 'noack' ? '#e0805a' : '#f0e6b0';
+        ctx.fillText('((·))', p.x - 4, p.y - 15);
+      } else if (u !== ctrl && TMM.Radio.linkState(game, u).code === 'dead') {
+        ctx.fillStyle = '#ff7a60';
+        ctx.fillText('무전✕', p.x - 4, p.y - 15);
+      }
+      ctx.restore();
+    }
+  }
+
+  // 명령을 고른 뒤 지도 위에서: 받는 전차들에서 커서까지 미리보기
+  const PREVIEW_NAME = { move: '이동', cover: '엄호 방향', bound: '엄호 이동 목표', withdraw: '철수 위치', target: '목표 지정' };
+  function drawPreview(ctx, view, game) {
+    const mode = game.cmd.mode;
+    const h = game.hover;
+    if (!mode || !h) return;
+    const units = TMM.Command.recipients(game, mode === 'bound' ? 'ALL' : game.cmd.to);
+    const hp = view.toScreen(h.x, h.y);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(240, 230, 180, 0.75)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash(mode === 'withdraw' ? [2, 4] : [7, 5]);
+    if (mode !== 'target') {
+      for (const u of units) {
+        const p = view.toScreen(u.x, u.y);
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(hp.x, hp.y);
+        ctx.stroke();
+      }
+    }
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(18, 22, 13, 0.85)';
+    const label = TMM.Command.specName(game, mode === 'bound' ? 'ALL' : game.cmd.to) + ' · ' + PREVIEW_NAME[mode];
+    ctx.font = '600 11px ' + FONT_MONO;
+    const w = ctx.measureText(label).width + 10;
+    ctx.fillRect(hp.x + 12, hp.y + 8, w, 17);
+    ctx.fillStyle = '#f0e6b0';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, hp.x + 17, hp.y + 16.5);
+    ctx.restore();
+  }
+
   function drawCursor(ctx, view, game) {
     const h = game.hover;
     if (!h || !game.selectedId || game.hoverContactId != null) return;
@@ -540,9 +647,10 @@ TMM.Renderer = (function () {
     const sel = game.units.find((u) => u.id === game.selectedId);
     if (sel && game.showSight && !sel.destroyed) drawSight(ctx, view, game, sel);
     drawRange(ctx, view, game, sel);
+    drawOrders(ctx, view, game);
     for (const u of game.units) drawPath(ctx, view, u, u.id === game.selectedId);
     drawFireLine(ctx, view, game, sel);
-    const contacts = Array.from(game.intel.friend.contacts.values());
+    const contacts = Array.from(game.intel.friend.contacts.values()).filter((c) => c.known);
     // 잔해 → 마지막 위치 → 보이는 접촉 순서로 (보이는 것이 위에)
     for (const c of contacts) if (c.wreck) drawContact(ctx, view, game, c, sel);
     for (const u of game.units) if (u.destroyed && u.id !== game.selectedId) drawUnit(ctx, view, u, false, time);
@@ -550,7 +658,9 @@ TMM.Renderer = (function () {
     for (const c of contacts) if (!c.wreck && c.visible) drawContact(ctx, view, game, c, sel);
     for (const u of game.units) if (!u.destroyed && u.id !== game.selectedId) drawUnit(ctx, view, u, false, time);
     if (sel) drawUnit(ctx, view, sel, true, time);
+    drawBadges(ctx, view, game, time);
     drawFx(ctx, view, game, time);
+    drawPreview(ctx, view, game);
     drawCursor(ctx, view, game);
   }
 

@@ -11,6 +11,11 @@
  *   - 정지 중이면 차체 정면을 표적 쪽으로 천천히 돌린다 (정면 장갑으로 받기 위해).
  *     M3: 아군 전차는 플레이어가 지정한 표적일 때만 차체를 돌린다. 자동 교전은 포탑만 돌아간다.
  *
+ * M4 사격 통제 (아군 소대 전차의 unit.roe, TMM.RADIO.ROE):
+ *   hold 사격 금지 — 스스로 쏘지 않는다. 지정 목표(목표 지정 명령)만 쏜다.
+ *   id   식별 후 사격 — 위의 기본 규칙 (적으로 식별된 표적, 2km 안)
+ *   free 자유 사격 — 식별된 적은 사거리 끝까지, 미상 표적도 1.5km 안이면 쏜다 (오인사격 위험)
+ *
  * 사격 결과는 events 배열에 { type: 'shot', shooter, target, ammoId, res, fresh } 로 쌓아
  * main.js 가 무전 기록과 화면 효과로 바꾼다.
  */
@@ -61,17 +66,27 @@ TMM.Gunnery = (function () {
         if (events) events.push({ type: 'cease-fire', unit, target: t, contact: c });
       } else if (I().sees(game, unit, t) && inRange(game, unit, t, unit.ammoType)) return t;
     }
+    const roe = side === 'friend' && unit.roe ? unit.roe : 'id';
+    if (roe === 'hold') return null; // 사격 금지: 지정 목표만
     let best = null, bestKey = Infinity;
     for (const t of allTargets(game, unit)) {
       if (t.destroyed || t.exited) continue;
       const c = I().contact(game, side, t.id);
-      if (!I().isHostile(c)) continue;
+      const unknown = roe === 'free' && c && !c.identified;
+      if (!unknown && !I().isHostile(c)) continue;
       const cls = TMM.VEHICLES[t.model].cls;
       if (side === 'enemy' && cls === 'infantry') continue;
       if (!I().sees(game, unit, t)) continue;
       const d = B().distanceM(game.map, unit, t);
       if (d > TMM.AMMO[unit.ammoType].rangeM) continue;
-      if (d > FREE_FIRE_M[side]) continue; // 자유 사격은 이 거리 안에서만 (더 먼 표적은 지정해야 쏜다)
+      if (unknown) {
+        // 자유 사격: 미상 표적도 쏜다 (식별된 적보다 뒤 순위). 정체를 모르므로 종류로 고르지 않는다.
+        if (d > TMM.RADIO.FREE_UNKNOWN_M) continue;
+        const key = 5e6 + d;
+        if (key < bestKey) { best = t; bestKey = key; }
+        continue;
+      }
+      if (roe !== 'free' && d > FREE_FIRE_M[side]) continue; // 자유 사격(자동 교전)은 이 거리 안에서만 (더 먼 표적은 지정해야 쏜다)
       if (side === 'enemy' && cls !== 'tank' && d > SOFT_MAX_M) continue; // 적은 먼 트럭에 귀한 철갑탄을 쓰지 않는다
       let key = CLS_RANK[cls] * 1e6 + d;
       // 적 포수는 옆구리·뒤를 보이는 전차를 먼저 노린다 (정면은 안 뚫리므로) — 정면이면 1km 더 먼 것처럼 친다

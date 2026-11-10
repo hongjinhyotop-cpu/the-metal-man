@@ -9,6 +9,11 @@
  *   - 시야 공유: 같은 편 전차 한 대가 본 접촉은 편 전체가 공유한다 (K1A2 전장관리체계, 적은 무전).
  *     단, '사격'은 그 전차가 직접 볼 때만 할 수 있다.
  *   - 안개 전쟁: 아무도 못 보면 접촉은 '마지막 위치'만 남고, MEMORY_SEC 이 지나면 지워진다.
+ *   - M4: 무전기(=전장관리체계 연결)가 손상된 전차가 본 것은 소대에 공유되지 않는다.
+ *     그 전차는 자기 눈으로 본 표적을 계속 식별·사격할 수 있지만, 지도·접촉 현황에는 나오지 않는다.
+ *     contact.known: 한 번이라도 '공유된' 접촉 (지도에 그리는 것은 이것만)
+ *     contact.visible: 지금 공유 가능한 관측자가 보고 있음 / contact.privVisible: 누구든(공유 안 되는 전차 포함) 보고 있음
+ *   - M4: 엄호 명령으로 지켜보는 방향(unit.watch) ±50° 안의 표적은 조금 더 멀리서 발견하고 더 빨리 식별한다.
  *
  * 관측자는 각 편의 전차 (아군: 소대 K1A2 4대, 적: 천마호). 플레이어가 지휘하지 않는 아군(보병·트럭·K2)은
  * 전장관리체계에 연결되지 않은 것으로 보고 관측자에서 뺀다.
@@ -41,6 +46,8 @@ TMM.Intel = (function () {
   }
 
   const moving = (u) => u.state === 'moving';
+  // 소대(편)와 정보를 나눌 수 있는 관측자: 무전기가 살아 있음
+  const networked = (u) => !u.damage.radio;
 
   function terrainSight(map, u) {
     const t = map.typeAt(u.x, u.y);
@@ -58,6 +65,15 @@ TMM.Intel = (function () {
 
     let r = sens.detect * sig.sig * ts.conceal;
     let idObs = ts.idObs;
+    let idMul = 1;
+    if (o.watch != null && TMM.RADIO) {
+      // 엄호: 지켜보는 방향
+      const a = Math.atan2(t.y - o.y, t.x - o.x) - o.watch;
+      if (Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) <= (TMM.RADIO.WATCH_HALF_DEG * Math.PI) / 180) {
+        r *= TMM.RADIO.WATCH_DETECT_MUL;
+        idMul = TMM.RADIO.WATCH_ID_MUL;
+      }
+    }
     if (moving(t)) r *= V().MOVING_MUL;
     if (flash) {
       r = Math.max(r, sens.detect * V().FLASH_MUL[game.light]);
@@ -68,7 +84,7 @@ TMM.Intel = (function () {
     if (!los.clear) return null;
     if (d > r * (1 - 0.5 * los.obs)) return null; // 숲 사이로 희미하게 보이면 탐지 거리가 줄어든다
     const obs = los.obs + idObs;
-    const idTime = sens.idBase * (0.4 + d / 1000) * (1 + 2 * obs) * sig.id;
+    const idTime = sens.idBase * (0.4 + d / 1000) * (1 + 2 * obs) * sig.id * idMul;
     return { d, obs, hullDown: los.hullDown && !moving(t) && TMM.VEHICLES[t.model].cls === 'tank', idTime };
   }
 
@@ -86,6 +102,7 @@ TMM.Intel = (function () {
     return {
       id: t.id, label, unit: t, visible: false, seenBy: [], lastX: t.x, lastY: t.y, lastSeen: now, firstSeen: now,
       idProg: 0, identified: false, kind: null, cls: null, wreck: false, dist: 0, obs: 0,
+      known: false, privVisible: false, privSeen: now,
     };
   }
 
@@ -114,7 +131,7 @@ TMM.Intel = (function () {
         continue;
       }
 
-      let best = null;
+      let best = null, bestNet = null;
       const seenBy = [];
       for (const o of obsList) {
         const pv = pairVis(game, o, t);
@@ -122,24 +139,34 @@ TMM.Intel = (function () {
         let m = game.vis.get(o.id);
         if (!m) game.vis.set(o.id, (m = new Map()));
         m.set(t.id, pv);
-        seenBy.push(o.id);
+        if (networked(o)) {
+          seenBy.push(o.id);
+          if (!bestNet || pv.idTime < bestNet.idTime) bestNet = pv;
+        }
         if (!best || pv.idTime < best.idTime) best = pv;
       }
 
       if (best) {
-        const fresh = !c;
-        if (fresh) {
+        if (!c) {
           c = newContact(S, t, now);
           S.contacts.set(t.id, c);
         }
-        c.visible = true;
+        c.privVisible = true;
+        c.privSeen = now;
         c.seenBy = seenBy;
-        c.lastX = t.x;
-        c.lastY = t.y;
-        c.lastSeen = now;
-        c.dist = best.d;
-        c.obs = best.obs;
-        if (fresh) events.push({ type: 'contact-new', side, contact: c, unit: t, by: seenBy[0] });
+        if (bestNet) {
+          // 공유 가능한 관측자가 봄 → 소대 전체 지도에
+          c.visible = true;
+          c.lastX = t.x;
+          c.lastY = t.y;
+          c.lastSeen = now;
+          c.dist = bestNet.d;
+          c.obs = bestNet.obs;
+          if (!c.known) {
+            c.known = true;
+            events.push({ type: 'contact-new', side, contact: c, unit: t, by: seenBy[0] });
+          }
+        } else c.visible = false;
         if (!c.identified) {
           if (side === t.side && TMM.VEHICLES[t.model].iff) identify(game, side, c, t, events, 'iff');
           else {
@@ -149,8 +176,9 @@ TMM.Intel = (function () {
         }
       } else if (c) {
         c.visible = false;
+        c.privVisible = false;
         c.seenBy = [];
-        if (now - c.lastSeen > V().MEMORY_SEC) S.contacts.delete(t.id);
+        if (now - c.lastSeen > V().MEMORY_SEC && now - c.privSeen > V().MEMORY_SEC) S.contacts.delete(t.id);
       }
     }
   }
@@ -196,6 +224,7 @@ TMM.Intel = (function () {
       c = newContact(S, t, game.gameSeconds);
       S.contacts.set(t.id, c);
     }
+    c.known = true;
     if (!c.identified) identify(game, side, c, t, events, how);
     return c;
   }
@@ -217,6 +246,7 @@ TMM.Intel = (function () {
     for (const c of game.intel.friend.contacts.values()) {
       if (!c.visible || c.wreck || c.kind === 'friendly') continue;
       if (c.unit.model === 'INF' || c.unit.model === 'TRUCK') continue;
+      if (c.identified && c.cls !== 'tank') continue;
       const los = TMM.Sight.line(game.map, c.unit, u);
       out.list.push({ contact: c, hullDown: los.clear && los.hullDown && !out.moving, sees: los.clear });
     }
